@@ -2,7 +2,7 @@
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## **Función de las seis jorobas de camello:**
+##  **2.1 Función de las seis jorobas de camello:**
 La función de las seis jorobas de camello (Six-Hump Camel) es una función frecuentemente utilizada para evaluar el desempeño de algoritmos de optimización en espacios de búsqueda no triviales. es una función no convexa, multimodal y polinómica de grado cuatro. 
 
 
@@ -27,11 +27,12 @@ Simon Fraser University. (s.f.).
 **-**Sus dos mínimos globales son (x~1~,x~2~)=(0.0898, -0.7126) y (x~1~,x~2~)=(-0.0898, 0.7126)
 con valor aproximado: $$f(x_1, x_2) \approx -1.0316$$
 
-## **Representación más gráfica de la función con sus jorobas:**
+#### **Representación más gráfica de la función con sus jorobas:**
 
-```{r echo=FALSE, warning=FALSE, message=FALSE}
+```{r sixhump-plot, fig.align='center', fig.cap= "_Fig 9. Función Six hump camel (2D)_", echo=FALSE,warning=FALSE,message=FALSE}
 # install.packages("plotly")
 library(plotly)
+library(GA)
 
 # Definir la función
 camel_six_hump <- function(x, y) {
@@ -57,7 +58,8 @@ plot_ly(x = ~x, y = ~y, z = ~z) %>%
          ))
 ```  
 
-## **Optimización mediante descenso del gradiente:**
+
+## **2.2 Optimización mediante descenso del gradiente:**
 
 Para gráficar y un entendimiento más fácil x~1~ = x y x~2~ = y 
 
@@ -67,7 +69,7 @@ $$
 f(x, y) = \left(4 - 2.1\, x^2 + \frac{x^4}{3}\right)x^2 + x\,y + \left(-4 + 4\, y^2\right)y^2
 $$
 
-## **Gradiente de la función:**
+#### **Gradiente de la función:**
 
 El gradiente es el vector de derivadas parciales:
 \[
@@ -90,11 +92,11 @@ $$
 
 
 
-## **Método de descenso por gradiente en dos dimensiones:**
+#### **Método de descenso por gradiente en dos dimensiones:**
 
 
 
-```{r echo=FALSE, warning=FALSE, message=FALSE}
+```{r sixhump1-plot, fig.align='center', fig.cap= "_Fig 10. Descenso por gradiente Six hump camel (2D)_", echo=FALSE,warning=FALSE,message=FALSE}
 # --- Librerias necesarias 2D ---
 packages <- c("ggplot2", "gganimate", "gifski", "GA", "reshape2")
 installed <- packages %in% installed.packages()
@@ -139,12 +141,12 @@ gradient_descent_2d <- function(start, learning_rate = 0.01, tol = 1e-6, max_ite
   return(path)
 }
 
-# --- Ejecutar descenso por gradiente en 2D con condición inicial aleatoria ---
+# --- Parametros y path ---
 set.seed(420)
 start_2d <- c(runif(1, -3, 3), runif(1, -2, 2))
-path_gd_2d <- gradient_descent_2d(start_2d, learning_rate = 0.003, tol = 1e-6, max_iter = 150)
+path_gd_2d <- gradient_descent_2d(start_2d, learning_rate = 0.003, tol = 1e-6, max_iter = 250)
 
-# --- Preparar datos para el contorno (para graficar la función) ---
+# --- Datos para graficar ---
 x_seq <- seq(-3, 3, length.out = 100)
 y_seq <- seq(-2, 2, length.out = 100)
 grid <- expand.grid(x = x_seq, y = y_seq)
@@ -158,15 +160,12 @@ p2d <- ggplot() +
   labs(title = 'Descenso por gradiente - Iteración: {closest_state}') +
   transition_states(path_gd_2d$iter, state_length = 1, transition_length = 1) +
   ease_aes('linear')
-# Se guarda el gif en el directorio de trabajo
+# GIF
 animate(p2d, nframes = nrow(path_gd_2d), fps = 20, renderer = gifski_renderer("gd_2d.gif"))
+
+subset(path_gd_2d, iter >= 239 & iter <= 241)
 ```
-
-
-
-
-
-#### **Figura -numero-:**
+#### **Figura 10:**
  
 En la figura podemos observar el método de descenso por gradiente, un algoritmo de optimización iterativo que  busca encontrar el mínimo de una función diferenciable. Consiste en calcular el **gradiente**, que indica la dirección de mayor incremento, y actualizar los parámetros en sentido opuesto, es decir, moviéndose hacia la dirección de mayor descenso—mediante una tasa de aprendizaje que regula el tamaño de cada paso. **Este proceso se repite hasta que las actualizaciones son mínimas**.(IBM, s.f.)
 
@@ -179,7 +178,11 @@ En la figura podemos observar el método de descenso por gradiente, un algoritmo
 
 
 
-```{r echo=FALSE}
+
+#### **Método de descenso por gradiente en tres dimensiones:**
+
+
+```{r sixhump2-plot, fig.align='center', fig.cap= "_Fig 11. Descenso por gradiente Six hump camel (3D)_", echo=FALSE,warning=FALSE,message=FALSE}
 # --- Instalar y cargar las librerías necesarias ---
 packages <- c("ggplot2", "gganimate", "gifski", "GA", "reshape2", "plotly")
 installed <- packages %in% installed.packages()
@@ -257,7 +260,7 @@ fig <- plot_ly() %>%
             mode = "lines+markers",
             marker = list(color = "blue", size = 4),
             line = list(color = "red", width = 4)) %>%
-  layout(title = "Descenso por Gradiente en tres dimensiones:",
+  layout(title = "",
          scene = list(
            xaxis = list(title = "x"),
            yaxis = list(title = "y"),
@@ -266,8 +269,7 @@ fig <- plot_ly() %>%
 
 fig
 ```
-
-#### **Figura -numero-:**
+#### **Figura 11:**
 **-** En tres dimensiones podemos ver una condición inicial diferente a la del gráfico en dos dimensiones. Esta condición inicial aleatoria se generó más cerca del minimo local (x,y)=(−0.08984, 0.71266) por lo tanto, el descenso por gradiente va a este punto mínimo local y no a uno de los minimos globales.
  
 "La función Six Hump Camel posee seis mínimos locales, de los cuales dos son mínimos globales. Este comportamiento multimodal la hace especialmente útil como caso de prueba en estudios y algoritmos de optimización, ya que permite evaluar la capacidad de estos para evitar converger únicamente en mínimos locales no globales." (Simon Fraser University, s.f.).
@@ -275,11 +277,16 @@ fig
 **-** La línea azul ilustra el recorrido desde el punto de partida en el plano xyz hasta el mínimo local obtenido por el descenso por gradiente. Aunque es un mínimo, no es el global, lo que significa que existen otros puntos donde la función toma un valor inferior que sí son totalmente óptimos
 
 
-## **Optimización con el método de enjambre de particulas PSO en dos dimensiones:**
 
 
 
-```{r echo=FALSE}
+
+
+## **2.3.1 Optimización con el método de enjambre de particulas PSO en dos dimensiones:**
+
+
+
+```{r sixhump3-plot, fig.align='center', fig.cap= "_Fig 12. Método de enjambre de particulas (PSO) (2D)_", echo=FALSE,warning=FALSE,message=FALSE}
 # Cargar las librerías necesarias
 library(ggplot2)
 library(gganimate)
@@ -397,17 +404,16 @@ p <- ggplot() +
   geom_contour(data = grid, aes(x = x, y = y, z = f), bins = 30, color = "grey") +
   geom_point(data = history_df, aes(x = x, y = y), color = 'darkblue', size = 2) +
   labs(title = 'Metodo de enjambre de particulas 2D - Iteración: {closest_state}',
-       x = "Variable x", y = "Variable y",
+       x = "x", y = "y",
        subtitle = "Cada punto representa la posición de una partícula") +
   transition_states(iteration, state_length = 2, transition_length = 2) +
   ease_aes('linear')
 
 # Renderizar y guardar la animación en un archivo GIF
 animate(p, nframes = max_iter, fps = 10, renderer = gifski_renderer("pso_six_hump_camel.gif"))
+
 ```
-
-
-#### **Figura -numero-:**
+#### **Figura 12:**
 
 
 En la figura se puede observar el proceso de optimización por enjambre de particulas en dos dimensiones en el cual en este caso se generaron 50 particulas en posiciones aleatorias dentro del dominio y cada particula con una velocidad inicial aleatoria
@@ -423,18 +429,19 @@ El algoritmo PSO guía mediante un equilibrio entre exploración y explotación.
 
 En el proceso, cuando alguna partícula descubre una buena solución (un valor bajo de la función en nuestro problema de minimización), esa posición se convierte en el "global best". Una vez que se determina un gbest, las demás partículas se ven atraídas hacia esa región, lo que provoca que eventualmente converjan entorno a esa solución. Huang, H., Qiu, J., & Riedl, K. (2023).
 
-En este caso el gbest (global best) mejor de la función, es uno de los dos minimos globales que posee la función, ubicado en (x,y)=(-0.0898, 0.7126) quien es el que se identifica  como el primer óptimo de la función.
+En este caso el gbest (global best) ubicado en (x,y)=(-0.0898, 0.7126) quien es el que se identifica  como el primer óptimo de la función en esta condición aleatoria en especifico.
 
 
 
 
-## **Optimización con el método de enjambre de particulas PSO en tres dimensiones:**
+#### **2.3.2 Optimización con el método de enjambre de particulas PSO en tres dimensiones:**
 
 
 
 
 
-```{r echo=FALSE}
+
+```{r sixhump4-plot, fig.align='center', fig.cap= "_Fig 13. Método de enjambre de particulas (PSO) (3D)_", echo=FALSE,warning=FALSE,message=FALSE}
 # Cargar librerías necesarias
 library(ggplot2)
 library(gganimate)
@@ -568,7 +575,7 @@ p <- ggplot() +
 animate(p, nframes = max_iter, fps = 10, renderer = gifski_renderer("pso_six_hump_camel_3d_custom_colors.gif"))
 ```
 
-#### **Figura -numero-:**
+#### **Figura 13:**
 
 En esta representación en tres dimensiones con una condición inicial aleatoria diferente a la de dos dimensiones, las particulas convergen en el segundo minimo global que posee la función de las seis jorobas de camello, exactamente en (x,y,z)=(0.0898, -0.7126, 0) en este caso, el minimo global óptimo.
 El cambio a tres dimensiones no supuso una diferencia mayor a su comportamiento comparado al de dos dimensiones.
@@ -577,12 +584,13 @@ El cambio a tres dimensiones no supuso una diferencia mayor a su comportamiento 
 
 
 
-## **Optimización con el método de evolución diferencial DE en dos dimensiones:**
+## **2.3.3 Optimización con el método de evolución diferencial DE en dos dimensiones:**
 
 
 
 
-```{r echo=FALSE, warning=FALSE, message=FALSE}
+
+```{r sixhump5-plot, fig.align='center', fig.cap= "_Fig 14. Método de evolución diferencial (DE) (2D)_", echo=FALSE,warning=FALSE,message=FALSE}
 # Cargar las librerías necesarias
 library(ggplot2)
 library(gganimate)
@@ -717,7 +725,7 @@ animate(p_anim, nframes = max_iter, fps = 10, renderer = gifski_renderer("de_six
 ```
     
     
-#### **Figura -numero-:**
+#### **Figura 14:**
 En la figura se usa como método de optimización el algoritmo de evolución diferencial DE el cual se caracteriza por utilizar una población de soluciones candidatas que evolucionan mediante operadores de mutación, cruce (recombinación) y selección. A diferencia de otros algoritmos evolutivos, DE genera nuevas soluciones perturbando vectores existentes mediante diferencias escaladas entre otros miembros de la población. Storn, R., & Price, K. (1997).
 
 Esto quiere decir que el algoritmo de evolución diferencial sirve para encontrar los mejores valores posibles de la función, en este caso sus dos minimos globales que posee.
@@ -725,11 +733,14 @@ Esto quiere decir que el algoritmo de evolución diferencial sirve para encontra
 
 Para entender la figura y el algoritmo se tiene que:
 **-** Primero, se asigna aleatoriamente una población o candidatos dentro del dominio de la función.
-**-** Luego, en cada iteración del algoritmo DE cada agente crea una versión modificada del mismo, que se mezcla con otros tres agentes/miembros de la población al azar en cualquier parte del plano
+
+**-** Luego, en cada iteración del algoritmo DE cada agente crea una versión modificada del mismo, que se mezcla con otros tres agentes/miembros de la población al azar en cualquier parte del plano.
+
 **-** Este agente mutado se mezcla con el agente original, mezclando su información. Si esta información se define como un punto más bajo en el plano, este lo reemplaza, si no, el antiguo se queda.
+
 **-** El proceso se repite hasta que a través de cada iteración (generaciones) el grupo se va acercando cada vez al punto más bajo, en este caso el minimo global.  Storn, R., & Price, K. (1997).
 
-En la figura se puede percibir que en menos de 90 iteraciones se llegó a los dos minimos globales, además de como cada punto rojo (población) se cruzaba y mutaba para encontrar estos mínimos.
+En la figura se puede percibir que en menos de 50 iteraciones se llegó a los dos minimos globales, además de como cada punto rojo (población) se cruzaba y mutaba para encontrar estos mínimos.
 
 De los anteriores algoritmos de optimización DE  es el único quien logró encontrar los dos mínimos globales de la función de las seis jorobas de camello.
       
@@ -737,11 +748,11 @@ De los anteriores algoritmos de optimización DE  es el único quien logró enco
       
       
       
-## **Optimización con el método de evolución diferencial DE en tres dimensiones:**
+## **2.3.4 Optimización con el método de evolución diferencial DE en tres dimensiones:**
 
 
 
-```{r echo=FALSE, warning=FALSE, message=FALSE}      
+```{r sixhump6-plot, fig.align='center', fig.cap= "_Fig 15. Método de evolución diferencial (DE) (3D)_", echo=FALSE,warning=FALSE,message=FALSE}      
 # Cargar las librerías necesarias
 library(ggplot2)
 library(gganimate)
@@ -874,7 +885,7 @@ p_anim <- ggplot() +
   scale_color_gradientn(colors = c("blue", "cyan", "green", "yellow", "red"),
                         name = "z") +
   labs(title = 'Evolución Diferencial (3D): Iteración {closest_state}',
-       subtitle = "Optimización de la función de las seis jorobas de camello en 3D",
+       subtitle = "Optimización de la función six hump camel en 3D",
        x = "x", y = "y") +
   transition_states(iteration, state_length = 2, transition_length = 2) +
   ease_aes('linear') +
@@ -886,7 +897,7 @@ animate(p_anim, nframes = max_iter, fps = 10, renderer = gifski_renderer("de_six
 
 
 
-#### **Figura -numero-:**
+#### **Figura 15:**
 
 
 En tres dimensiones se amplía la búsqueda y adaptación de la Evolución Diferencial a un espacio de mayor dimensión, introduce operaciones vectoriales en tres componentes Cada candidato es ahora un vector (x,y,z) y proporciona una visualización que proyecta información de la tercera dimensión a través del color. Los pasos fundamentales (mutación, cruce y selección) se mantienen, pero se ejecutan en un espacio más complejo. También se nota a medida de cada iteración como cambia el color en los agentes y descienden a los dos minimos globales hasta llegar al 0 en z.
@@ -897,12 +908,13 @@ En tres dimensiones se amplía la búsqueda y adaptación de la Evolución Difer
 
 
 
-## **Optimización con el método GA de algoritmos evolutivos en 2D**
+## **2.3.5 Optimización con el método GA de algoritmos evolutivos en 2D**
 
 
 
 
-```{r echo=FALSE, warning=FALSE, message=FALSE}
+```{r sixhump7-plot, fig.align='center', fig.cap= "_Fig 16. Método de algoritmos geneticos (GA) (2D)_", echo=FALSE,warning=FALSE,message=FALSE}
+library(GA)
 # Lista para almacenar la evolución poblacional durante las generaciones
 population_history_2d <- list()
 ga_monitor <- function(obj) {
@@ -946,7 +958,7 @@ animate(pga2d, nframes = length(unique(pop_data_2d$generation)), fps = 5,
 ```
 
 
-#### **Figura -numero-:**
+#### **Figura 16:**
 
 Los Algoritmos Genéticos (Genetic Algorithms) son técnicas de optimización inspiradas en el proceso de evolución natural. Al igual que la selección natural en la biología, simulan cómo evolucionan las soluciones "mejores" con el tiempo. Holland, J. H. (1975).
 
@@ -957,3 +969,80 @@ En este caso, el algoritmo se prueba con 50 individuos dentro de la población l
 **-** Estos "puntos" o individuos dentro de la población que ya fueron elegidos, se cruzan y dan lugar a hijos con mejores caracteristicas, esto, sucediendo de generación en generación mejorando con cada iteración.
 
 Esto da lugar a que el algoritmo encuentre el minimo global optimo según las generaciones.
+
+
+
+## **2.3.6 Optimización con el método GA de algoritmos evolutivos en 3D**
+
+
+```{r sixhump8-plot, fig.align='center', fig.cap= "_Fig 17. Método de algoritmos geneticos (GA) (3D)_", echo=FALSE,warning=FALSE,message=FALSE}
+# --- Función Six-Hump Camel en 2D (se usa para generar la superficie 3D) ---
+six_hump_camel_2d <- function(x, y) {
+  (4 - 2.1 * x^2 + (x^4)/3) * x^2 + x * y + (-4 + 4 * y^2) * y^2
+}
+
+# (Se asume que ya corriste el algoritmo GA y que 'population_history_2d' y 'pop_data_2d' existen)
+
+# Cargar la librería plotly para la visualización 3D
+library(plotly)
+
+# Crear una malla para la superficie del Six-Hump Camel
+x_seq <- seq(-3, 3, length.out = 100)
+y_seq <- seq(-2, 2, length.out = 100)
+grid_df <- expand.grid(x = x_seq, y = y_seq)
+grid_df$z <- six_hump_camel_2d(grid_df$x, grid_df$y)
+
+# Transformar la columna z en una matriz para la función add_surface() de plotly
+z_matrix <- matrix(grid_df$z, nrow = length(x_seq), ncol = length(y_seq))
+
+# (Opcional) Convertir el atributo 'generation' a variable numérica, si se requiere
+pop_data_2d$generation <- as.numeric(as.character(pop_data_2d$generation))
+
+# Crear el gráfico 3D animado:
+fig <- plot_ly() %>%
+  # Agregar la superficie de la función
+  add_surface(x = ~x_seq, y = ~y_seq, z = ~z_matrix,
+              opacity = 0.5, colorscale = "Viridis", showscale = FALSE) %>%
+  # Agregar los puntos (evolución poblacional) como marcadores
+  add_markers(data = pop_data_2d,
+              x = ~x, y = ~y, z = ~f,
+              marker = list(color = "darkgreen", size = 4),
+              frame = ~generation) %>%
+  layout(title = "Evolución poblacional - GA en 3D",
+         scene = list(xaxis = list(title = "X"),
+                      yaxis = list(title = "Y"),
+                      zaxis = list(title = "f(x, y)")))
+
+fig  # Visualizar la animación interactiva
+```
+
+
+## **2.4 Conclusiones:**
+### **¿Qué aportaron los métodos de descenso por gradiente y qué aportaron los métodos heurísticos?**
+#### **Método por descenso del gradiente:**
+
+En la figura 10 donde se hace el recorrido del método de descenso por gradiente con condición inicial aleatoria en dos dimensiones, se aprecia que para alcanzar el valor objetivo __f(x,y)≈−1.0316__ tomó 241 iteraciones exactamente, Esto, solo en el caso de esta seed ya que en el caso de recorrido del algoritmo en tres dimensiones (figura 11) el método de descenso por gradiente se atascó en uno de los mínimos locales que posee la función de las seis jorobas de camello. Por lo tanto este método requiere condiciones especiales para que encuentre el valor objetivo óptimo porque depende de que tan cerca la condición aleatoria esté a uno de los dos minimos globales o minimos locales de la función para que descienda a estos.
+
+### **Métodos heurísticos:**
+
+#### **Optimización con el método de algoritmos evolutivos (GA):**
+
+Usando el método de algoritmos evolutivos (GA) para una población de 50 individuos, en dos dimensiones y tres dimensiones se llegó a la conclusión que en la generación numero 17 el algoritmo pudo alcanzar el valor objetivo de la función sin atascarse en mínimos locales. Se tiene en cuenta también que no converje al mismo tiempo en los dos minimos globales que tiene la función si no al primero que encuentra.
+
+#### **Optimización con el método de enjambre de particulas (PSO):**
+
+Por optimización mediante PSO se alcanzó el valor objetivo por primera vez a partir de la iteración 18 (con una población de 50 y una inercia de 0.5) la cual a partir de esta iteración se presenta un mejor fitness igual a __−1.0316__. En todos los casos de condición aleatoria el enjambre de particulas llegó a uno de los dos minimos globales.Por lo tanto, se concluye a partir de esto que:
+
+**-** En dos y tres dimensiones el algoritmo PSO siempre encontró el valor objetivo, pero no los dos mínimos globales al mismo tiempo que presenta la función de las seis jorobas de camello.
+
+**-** Con un ajuste de la inercia en el algoritmo a 0.5 se logró que todas las particulas converjan al primer minimo global encontrado por una de ellas.
+
+
+**-** A comparación del algoritmo de descenso por gradiente, la optimización por PSO si va exactamente a el valor óptimo de la función sin tener en cuenta una condición inicial aleatoria que lo beneficie.
+
+#### **Optimización con el método de evolución diferencial (DE):**
+
+Por optimización mediante DE se logró el valor objetivo en alrededor de 43 iteraciones con una población de 50 individuos.
+Tanto como en dos dimensiones y tres dimensiones el algoritmo encontró los dos mínimos globales de la función de una forma eficiente, dejando pasar mínimos locales y encontrando el valor óptimo de la función.
+A diferencia de los otros métodos heuristicos y metodo por descenso del gradiente presentados en este trabajo, el algoritmo de evolución diferencial fue el único en encontrar los dos mínimos globales de la función de las seis jorobas de camello
+
