@@ -1,0 +1,959 @@
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## **Función de las seis jorobas de camello:**
+La función de las seis jorobas de camello (Six-Hump Camel) es una función frecuentemente utilizada para evaluar el desempeño de algoritmos de optimización en espacios de búsqueda no triviales. es una función no convexa, multimodal y polinómica de grado cuatro. 
+
+
+
+**Se define como:**
+
+$$
+f(\mathbf{x}) = \left( 4 - 2.1x_1^2 + \frac{x_1^4}{3} \right)x_1^2 + x_1x_2 + \left( -4 + 4x_2^2 \right)x_2^2
+$$
+
+La función presenta seis regiones prominentes (jorobas) en su superficie, siendo esta una función no convexa, dando lugar a múltiples mínimos locales y dos mínimos globales bien definidos.
+Simon Fraser University. (s.f.). 
+
+**Para esta definición:**
+
+**-**La primera parte de la función, depende de x~1~ y genera curvaturas multiples.
+
+**-**La segunda parte de la función x~1~ y x~2~ es un acoplamiento lineal 
+
+**-**La tercera parte de la función x~2~ agrega simetría
+
+**-**Sus dos mínimos globales son (x~1~,x~2~)=(0.0898, -0.7126) y (x~1~,x~2~)=(-0.0898, 0.7126)
+con valor aproximado: $$f(x_1, x_2) \approx -1.0316$$
+
+## **Representación más gráfica de la función con sus jorobas:**
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+# install.packages("plotly")
+library(plotly)
+
+# Definir la función
+camel_six_hump <- function(x, y) {
+  term1 <- (4 - 2.1 * x^2 + (x^4) / 3) * x^2
+  term2 <- x * y
+  term3 <- (-4 + 4 * y^2) * y^2
+  return(term1 + term2 + term3)
+}
+
+# Crear una malla de puntos
+x <- seq(-2, 2, length.out = 200)
+y <- seq(-1, 1, length.out = 200)
+z <- outer(x, y, camel_six_hump)
+
+# Crear el gráfico 3D
+plot_ly(x = ~x, y = ~y, z = ~z) %>%
+  add_surface(colorscale = "Viridis") %>%
+  layout(title = "Función de las seis jorobas de camello:",
+         scene = list(
+           xaxis = list(title = "x"),
+           yaxis = list(title = "y"),
+           zaxis = list(title = "f(x, y)")
+         ))
+```  
+
+## **Optimización mediante descenso del gradiente:**
+
+Para gráficar y un entendimiento más fácil x~1~ = x y x~2~ = y 
+
+Así:
+
+$$
+f(x, y) = \left(4 - 2.1\, x^2 + \frac{x^4}{3}\right)x^2 + x\,y + \left(-4 + 4\, y^2\right)y^2
+$$
+
+## **Gradiente de la función:**
+
+El gradiente es el vector de derivadas parciales:
+\[
+\nabla (x, y) = 
+\left( 
+\frac{\partial f}{\partial x}, \frac{\partial f}{\partial y}
+\right)
+\]
+**-** La derivada con respecto a x es:
+$$
+\frac{\partial f}{\partial x} = 8x - 8.4x^3 + 2x^5 + y
+$$
+**-** La derivada con respecto a y es: 
+$$
+\frac{\partial f}{\partial y} = x + 16y^3 - 8y
+$$
+
+
+
+
+
+
+## **Método de descenso por gradiente en dos dimensiones:**
+
+
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+# --- Librerias necesarias 2D ---
+packages <- c("ggplot2", "gganimate", "gifski", "GA", "reshape2")
+installed <- packages %in% installed.packages()
+if(any(!installed)) install.packages(packages[!installed])
+library(ggplot2)
+library(gganimate)
+library(gifski)
+library(GA)
+library(reshape2)
+
+# --- Función Six-Hump Camel en 2D ---
+six_hump_camel_2d <- function(x, y) {
+  (4 - 2.1*x^2 + (x^4)/3) * x^2 + x*y + (-4 + 4*y^2) * y^2
+}
+
+# --- Gradiente analítico de la función en 2D ---
+grad_six_hump_camel_2d <- function(x, y) {
+  # Derivada parcial respecto a x:
+  dfx <- 8*x - 8.4*x^3 + 2*x^5 + y
+  # Derivada parcial respecto a y:
+  dfy <- x + 16*y^3 - 8*y
+  return(c(dfx, dfy))
+}
+
+# --- Función de descenso por gradiente para 2D ---
+gradient_descent_2d <- function(start, learning_rate = 0.01, tol = 1e-6, max_iter = 450) {
+  x <- start[1]; y <- start[2]
+  path <- data.frame(iter = 0, x = x, y = y, f = six_hump_camel_2d(x, y))
+  for (i in 1:max_iter) {
+    grad <- grad_six_hump_camel_2d(x, y)
+    x_new <- x - learning_rate * grad[1]
+    y_new <- y - learning_rate * grad[2]
+    # Si el cambio es menor que la tolerancia, se termina
+    if (sqrt((x_new - x)^2 + (y_new - y)^2) < tol) {
+      x <- x_new; y <- y_new
+      path <- rbind(path, data.frame(iter = i, x = x, y = y, f = six_hump_camel_2d(x, y)))
+      break
+    }
+    x <- x_new; y <- y_new
+    path <- rbind(path, data.frame(iter = i, x = x, y = y, f = six_hump_camel_2d(x, y)))
+  }
+  return(path)
+}
+
+# --- Ejecutar descenso por gradiente en 2D con condición inicial aleatoria ---
+set.seed(420)
+start_2d <- c(runif(1, -3, 3), runif(1, -2, 2))
+path_gd_2d <- gradient_descent_2d(start_2d, learning_rate = 0.003, tol = 1e-6, max_iter = 150)
+
+# --- Preparar datos para el contorno (para graficar la función) ---
+x_seq <- seq(-3, 3, length.out = 100)
+y_seq <- seq(-2, 2, length.out = 100)
+grid <- expand.grid(x = x_seq, y = y_seq)
+grid$f <- with(grid, six_hump_camel_2d(x, y))
+
+# --- Animación del proceso de descenso por gradiente en 2D ---
+p2d <- ggplot() +
+  geom_contour(data = grid, aes(x = x, y = y, z = f), bins = 30, color = "grey") +
+  geom_path(data = path_gd_2d, aes(x = x, y = y), color = "red", size = 1) +
+  geom_point(data = path_gd_2d, aes(x = x, y = y), color = "blue", size = 2) +
+  labs(title = 'Descenso por gradiente - Iteración: {closest_state}') +
+  transition_states(path_gd_2d$iter, state_length = 1, transition_length = 1) +
+  ease_aes('linear')
+# Se guarda el gif en el directorio de trabajo
+animate(p2d, nframes = nrow(path_gd_2d), fps = 20, renderer = gifski_renderer("gd_2d.gif"))
+```
+
+
+
+
+
+#### **Figura -numero-:**
+ 
+En la figura podemos observar el método de descenso por gradiente, un algoritmo de optimización iterativo que  busca encontrar el mínimo de una función diferenciable. Consiste en calcular el **gradiente**, que indica la dirección de mayor incremento, y actualizar los parámetros en sentido opuesto, es decir, moviéndose hacia la dirección de mayor descenso—mediante una tasa de aprendizaje que regula el tamaño de cada paso. **Este proceso se repite hasta que las actualizaciones son mínimas**.(IBM, s.f.)
+
+**-** En esta representación gráfica podemos observar que partiendo desde un punto aleatorio del plano, el descenso por gradiente generalmente busca el minimo local más cercano, en este caso encontró uno de los dos minimos globales que tiene esta función ubicado en (x,y)=(-0.0898, 0.7126)
+
+**-** El descenso por gradiente puede o no encontrar el valor óptimo global  de la **función de las seis jorobas de camello**, ya que este se "guiará" por el minimo local más cercano. Así que depende mucho de su condición inicial, en este caso, aleatoria.
+
+
+
+
+
+
+```{r echo=FALSE}
+# --- Instalar y cargar las librerías necesarias ---
+packages <- c("ggplot2", "gganimate", "gifski", "GA", "reshape2", "plotly")
+installed <- packages %in% installed.packages()
+if(any(!installed)) install.packages(packages[!installed])
+library(ggplot2)
+library(gganimate)
+library(gifski)
+library(GA)
+library(reshape2)
+library(plotly)
+
+# --- Función Six-Hump Camel en 2D ---
+six_hump_camel_2d <- function(x, y) {
+  (4 - 2.1 * x^2 + (x^4)/3) * x^2 + x*y + (-4 + 4*y^2) * y^2
+}
+
+# --- Gradiente analítico de la función en 2D ---
+grad_six_hump_camel_2d <- function(x, y) {
+  dfx <- 8 * x - 8.4 * x^3 + 2 * x^5 + y      # Derivada parcial respecto a x
+  dfy <- x + 16 * y^3 - 8 * y                   # Derivada parcial respecto a y
+  return(c(dfx, dfy))
+}
+
+# --- Función de descenso por gradiente para 2D ---
+gradient_descent_2d <- function(start, learning_rate = 0.01, tol = 1e-6, max_iter = 450) {
+  x <- start[1]; y <- start[2]
+  path <- data.frame(iter = 0, x = x, y = y, f = six_hump_camel_2d(x, y))
+  for (i in 1:max_iter) {
+    grad <- grad_six_hump_camel_2d(x, y)
+    x_new <- x - learning_rate * grad[1]
+    y_new <- y - learning_rate * grad[2]
+    # Si el cambio es menor que la tolerancia, se termina
+    if (sqrt((x_new - x)^2 + (y_new - y)^2) < tol) {
+      x <- x_new; y <- y_new
+      path <- rbind(path, data.frame(iter = i, x = x, y = y, f = six_hump_camel_2d(x, y)))
+      break
+    }
+    x <- x_new; y <- y_new
+    path <- rbind(path, data.frame(iter = i, x = x, y = y, f = six_hump_camel_2d(x, y)))
+  }
+  return(path)
+}
+
+# --- Ejecutar descenso por gradiente en 2D con condición inicial aleatoria ---
+set.seed(420)
+start_2d <- c(runif(1, -3, 3), runif(1, -2, 2))
+path_gd_2d <- gradient_descent_2d(start_2d, learning_rate = 0.003, tol = 1e-6, max_iter = 150)
+
+# --- Preparar la grilla para la superficie 3D ---
+# Aumentamos la resolución de la grilla
+x_seq <- seq(-3, 3, length.out = 200)
+y_seq <- seq(-2, 2, length.out = 200)
+z_vals <- outer(x_seq, y_seq, six_hump_camel_2d)
+
+# --- Visualización 3D interactiva con plotly y contornos ---
+fig <- plot_ly() %>%
+  add_surface(
+    x = ~x_seq, 
+    y = ~y_seq, 
+    z = ~z_vals,
+    opacity = 0.9,
+    colorscale = "Viridis",
+    contours = list(
+      z = list(
+        show = TRUE,            # Muestra los contornos en la dimensión z
+        usecolormap = TRUE,       # Usa la misma escala de colores para los contornos
+        highlightcolor = "#ff0000",
+        project = list(z = TRUE)
+      )
+    )
+  ) %>%
+  add_trace(data = path_gd_2d,
+            x = ~x, y = ~y, z = ~f,
+            type = "scatter3d",
+            mode = "lines+markers",
+            marker = list(color = "blue", size = 4),
+            line = list(color = "red", width = 4)) %>%
+  layout(title = "Descenso por Gradiente en tres dimensiones:",
+         scene = list(
+           xaxis = list(title = "x"),
+           yaxis = list(title = "y"),
+           zaxis = list(title = "f(x, y)")
+         ))
+
+fig
+```
+
+#### **Figura -numero-:**
+**-** En tres dimensiones podemos ver una condición inicial diferente a la del gráfico en dos dimensiones. Esta condición inicial aleatoria se generó más cerca del minimo local (x,y)=(−0.08984, 0.71266) por lo tanto, el descenso por gradiente va a este punto mínimo local y no a uno de los minimos globales.
+ 
+"La función Six Hump Camel posee seis mínimos locales, de los cuales dos son mínimos globales. Este comportamiento multimodal la hace especialmente útil como caso de prueba en estudios y algoritmos de optimización, ya que permite evaluar la capacidad de estos para evitar converger únicamente en mínimos locales no globales." (Simon Fraser University, s.f.).
+
+**-** La línea azul ilustra el recorrido desde el punto de partida en el plano xyz hasta el mínimo local obtenido por el descenso por gradiente. Aunque es un mínimo, no es el global, lo que significa que existen otros puntos donde la función toma un valor inferior que sí son totalmente óptimos
+
+
+## **Optimización con el método de enjambre de particulas PSO en dos dimensiones:**
+
+
+
+```{r echo=FALSE}
+# Cargar las librerías necesarias
+library(ggplot2)
+library(gganimate)
+library(gifski)
+
+# Definir la función Six-Hump Camel para minimización
+six_hump_camel <- function(v) {
+  x <- v[1]
+  y <- v[2]
+  term1 <- (4 - 2.1 * x^2 + (x^4) / 3) * x^2
+  term2 <- x * y
+  term3 <- (-4 + 4 * y^2) * y^2
+  return(term1 + term2 + term3)
+}
+
+# Parámetros del PSO
+n_particles <- 50      # Número de partículas en el enjambre
+max_iter    <- 70     # Número máximo de iteraciones
+w  <- 0.5            # Peso de inercia (valor comúnmente usado)
+c1 <- 1.49445          # Componente cognitivo (atracción hacia pbest)
+c2 <- 1.49445          # Componente social (atracción hacia gbest)
+
+# Definir los límites del espacio de búsqueda
+lower <- c(-3, -2)
+upper <- c(3, 2)
+
+# Inicializar posiciones y velocidades de las partículas de forma aleatoria
+set.seed(134)
+positions <- matrix(0, nrow = n_particles, ncol = 2)
+velocities <- matrix(0, nrow = n_particles, ncol = 2)
+for (d in 1:2) {
+  positions[, d] <- runif(n_particles, min = lower[d], max = upper[d])
+  # Inicializamos la velocidad en un rango relacionado con el tamaño del dominio
+  velocities[, d] <- runif(n_particles, min = -abs(upper[d]-lower[d]), 
+                           max = abs(upper[d]-lower[d]))
+}
+
+# Inicializar el “personal best” de cada partícula (posición y valor) 
+pbest_positions <- positions
+pbest_values <- apply(positions, 1, six_hump_camel)
+
+# Inicializar el “global best” tomando la mejor de las pbest
+gbest_index <- which.min(pbest_values)
+gbest_position <- pbest_positions[gbest_index, ]
+gbest_value <- pbest_values[gbest_index]
+
+# Crear una lista para almacenar la evolución de las posiciones de las partículas en cada iteración
+history <- list()
+
+# Bucle principal del PSO
+for (iter in 1:max_iter) {
+  # Guardar el estado actual de las partículas
+  history[[iter]] <- data.frame(
+    iteration = iter,
+    particle = 1:n_particles,
+    x = positions[, 1],
+    y = positions[, 2],
+    fitness = apply(positions, 1, six_hump_camel)
+  )
+  
+  # Actualizar cada partícula
+  for (i in 1:n_particles) {
+    # Generar números aleatorios para la componente cognitiva y social
+    r1 <- runif(2)
+    r2 <- runif(2)
+    
+    # Actualizar velocidad según la fórmula PSO
+    velocities[i, ] <- w * velocities[i, ] +
+      c1 * r1 * (pbest_positions[i, ] - positions[i, ]) +
+      c2 * r2 * (gbest_position - positions[i, ])
+    
+    # Actualizar la posición
+    positions[i, ] <- positions[i, ] + velocities[i, ]
+    
+    # Asegurarse de que las partículas se queden dentro de los límites
+    for (d in 1:2) {
+      if (positions[i, d] < lower[d]) {
+        positions[i, d] <- lower[d]
+        velocities[i, d] <- -velocities[i, d]
+      } else if (positions[i, d] > upper[d]) {
+        positions[i, d] <- upper[d]
+        velocities[i, d] <- -velocities[i, d]
+      }
+    }
+    
+    # Evaluar la función en la nueva posición
+    current_fitness <- six_hump_camel(positions[i, ])
+    
+    # Actualizar el "personal best" si se mejora la solución
+    if (current_fitness < pbest_values[i]) {
+      pbest_positions[i, ] <- positions[i, ]
+      pbest_values[i] <- current_fitness
+    }
+    
+    # Actualizar el "global best" si se encuentra una mejora
+    if (current_fitness < gbest_value) {
+      gbest_position <- positions[i, ]
+      gbest_value <- current_fitness
+    }
+  }
+}
+
+# Combinar en un solo data frame la información de todas las iteraciones para la animación
+history_df <- do.call(rbind, history)
+history_df$iteration <- as.factor(history_df$iteration)
+
+# Crear una malla para el gráfico de contorno del paisaje de la función
+x_seq <- seq(lower[1], upper[1], length.out = 100)
+y_seq <- seq(lower[2], upper[2], length.out = 100)
+grid <- expand.grid(x = x_seq, y = y_seq)
+grid$f <- apply(grid, 1, function(v) six_hump_camel(c(v[1], v[2])))
+
+# Generar el gráfico animado (GIF) que muestra la evolución de las partículas
+p <- ggplot() +
+  geom_contour(data = grid, aes(x = x, y = y, z = f), bins = 30, color = "grey") +
+  geom_point(data = history_df, aes(x = x, y = y), color = 'darkblue', size = 2) +
+  labs(title = 'Metodo de enjambre de particulas 2D - Iteración: {closest_state}',
+       x = "Variable x", y = "Variable y",
+       subtitle = "Cada punto representa la posición de una partícula") +
+  transition_states(iteration, state_length = 2, transition_length = 2) +
+  ease_aes('linear')
+
+# Renderizar y guardar la animación en un archivo GIF
+animate(p, nframes = max_iter, fps = 10, renderer = gifski_renderer("pso_six_hump_camel.gif"))
+```
+
+
+#### **Figura -numero-:**
+
+
+En la figura se puede observar el proceso de optimización por enjambre de particulas en dos dimensiones en el cual en este caso se generaron 50 particulas en posiciones aleatorias dentro del dominio y cada particula con una velocidad inicial aleatoria
+
+
+El algoritmo PSO guía mediante un equilibrio entre exploración y explotación. Es decir, cada partícula se mueve en el espacio de búsqueda basándose en tres componentes:
+
+**-Inercia:** Conserva una parte de su velocidad actual.
+
+**-Atracción personal** (pbest): Se dirige hacia la mejor posición que ha encontrado.
+
+**-Atracción social** (gbest): Se mueve hacia la mejor posición encontrada por todo el enjambre.
+
+En el proceso, cuando alguna partícula descubre una buena solución (un valor bajo de la función en nuestro problema de minimización), esa posición se convierte en el "global best". Una vez que se determina un gbest, las demás partículas se ven atraídas hacia esa región, lo que provoca que eventualmente converjan entorno a esa solución. Huang, H., Qiu, J., & Riedl, K. (2023).
+
+En este caso el gbest (global best) mejor de la función, es uno de los dos minimos globales que posee la función, ubicado en (x,y)=(-0.0898, 0.7126) quien es el que se identifica  como el primer óptimo de la función.
+
+
+
+
+## **Optimización con el método de enjambre de particulas PSO en tres dimensiones:**
+
+
+
+
+
+```{r echo=FALSE}
+# Cargar librerías necesarias
+library(ggplot2)
+library(gganimate)
+library(gifski)
+
+# Definir la función Six-Hump Camel extendida a 3D
+# Se extiende añadiéndole el término z^2 para la tercera dimensión
+six_hump_camel_3d <- function(v) {
+  x <- v[1]
+  y <- v[2]
+  z <- v[3]
+  term1 <- (4 - 2.1 * x^2 + (x^4) / 3) * x^2
+  term2 <- x * y
+  term3 <- (-4 + 4 * y^2) * y^2
+  term4 <- z^2
+  return(term1 + term2 + term3 + term4)
+}
+
+# Parámetros del PSO en 3D
+n_particles <- 50      # Número de partículas
+max_iter    <- 50     # Número máximo de iteraciones
+w  <- 0.5            # Peso de inercia
+c1 <- 1.49445          # Componente cognitivo
+c2 <- 1.49445          # Componente social
+
+# Definir los límites del espacio de búsqueda para x, y y z
+lower <- c(-3, -2, -1)
+upper <- c( 3,  2,  1)
+
+# Inicializar posiciones y velocidades para las 3 dimensiones
+set.seed(300)
+positions <- matrix(0, nrow = n_particles, ncol = 3)
+velocities <- matrix(0, nrow = n_particles, ncol = 3)
+for (d in 1:3) {
+  positions[, d] <- runif(n_particles, min = lower[d], max = upper[d])
+  velocities[, d] <- runif(n_particles, min = -abs(upper[d]-lower[d]),
+                           max =  abs(upper[d]-lower[d]))
+}
+
+# Inicializar el “personal best” para cada partícula
+pbest_positions <- positions
+pbest_values <- apply(positions, 1, six_hump_camel_3d)
+
+# Inicializar el “global best” con la mejor solución
+gbest_index <- which.min(pbest_values)
+gbest_position <- pbest_positions[gbest_index, ]
+gbest_value <- pbest_values[gbest_index]
+
+# Lista para almacenar la evolución de las partículas
+history <- list()
+
+# Bucle principal del PSO
+for (iter in 1:max_iter) {
+  # Guardar el estado actual de las partículas (x, y, z y fitness)
+  history[[iter]] <- data.frame(
+    iteration = iter,
+    particle = 1:n_particles,
+    x = positions[, 1],
+    y = positions[, 2],
+    z = positions[, 3],
+    fitness = apply(positions, 1, six_hump_camel_3d)
+  )
+  
+  for (i in 1:n_particles) {
+    r1 <- runif(3)
+    r2 <- runif(3)
+    
+    velocities[i, ] <- w * velocities[i, ] +
+      c1 * r1 * (pbest_positions[i, ] - positions[i, ]) +
+      c2 * r2 * (gbest_position - positions[i, ])
+    
+    positions[i, ] <- positions[i, ] + velocities[i, ]
+    
+    # Asegurarse de que las partículas se mantengan en el dominio
+    for (d in 1:3) {
+      if (positions[i, d] < lower[d]) {
+        positions[i, d] <- lower[d]
+        velocities[i, d] <- -velocities[i, d]
+      } else if (positions[i, d] > upper[d]) {
+        positions[i, d] <- upper[d]
+        velocities[i, d] <- -velocities[i, d]
+      }
+    }
+    
+    current_fitness <- six_hump_camel_3d(positions[i, ])
+    
+    if (current_fitness < pbest_values[i]) {
+      pbest_positions[i, ] <- positions[i, ]
+      pbest_values[i] <- current_fitness
+    }
+    
+    if (current_fitness < gbest_value) {
+      gbest_position <- positions[i, ]
+      gbest_value <- current_fitness
+    }
+  }
+}
+
+# Combinar la información de todas las iteraciones
+history_df <- do.call(rbind, history)
+history_df$iteration <- as.factor(history_df$iteration)
+
+# Crear la malla para representar el fondo del plano.
+# Se evalúa la función en el plano (x, y) asumiendo z = 0 para representar
+# la topografía base de la función.
+x_seq <- seq(lower[1], upper[1], length.out = 100)
+y_seq <- seq(lower[2], upper[2], length.out = 100)
+grid <- expand.grid(x = x_seq, y = y_seq)
+grid$f <- apply(grid, 1, function(v) six_hump_camel_3d(c(v[1], v[2], 0)))
+
+# Generar el gráfico animado con ggplot2
+p <- ggplot() +
+  # Fondo: Relleno del raster donde se aplica la escala de colores personalizada.
+  geom_raster(data = grid, aes(x = x, y = y, fill = f), interpolate = TRUE) +
+  # Curvas de nivel para acentuar la topografía
+  geom_contour(data = grid, aes(x = x, y = y, z = f), bins = 30, color = "white", alpha = 0.5) +
+  # Partículas (se proyectan en x-y) con color rojo
+  geom_point(data = history_df, aes(x = x, y = y), color = "red", size = 2) +
+  # Usamos scale_fill_gradientn para definir la escala:
+  # Los valores bajos (mínimos locales/globales) se representan en tonos fríos,
+  # y los valores altos en tonos cálidos.
+  scale_fill_gradientn(colors = c("blue", "cyan", "green", "yellow", "red"),
+                       name = "z") +
+  labs(title = 'Metodo de enjambre de particulas 3D - Iteración: {closest_state}',
+       subtitle = "",
+       x = "x", y = "y") +
+  transition_states(iteration, state_length = 2, transition_length = 2) +
+  ease_aes('linear')
+
+# Renderizar y guardar la animación en un archivo GIF
+animate(p, nframes = max_iter, fps = 10, renderer = gifski_renderer("pso_six_hump_camel_3d_custom_colors.gif"))
+```
+
+#### **Figura -numero-:**
+
+En esta representación en tres dimensiones con una condición inicial aleatoria diferente a la de dos dimensiones, las particulas convergen en el segundo minimo global que posee la función de las seis jorobas de camello, exactamente en (x,y,z)=(0.0898, -0.7126, 0) en este caso, el minimo global óptimo.
+El cambio a tres dimensiones no supuso una diferencia mayor a su comportamiento comparado al de dos dimensiones.
+
+
+
+
+
+## **Optimización con el método de evolución diferencial DE en dos dimensiones:**
+
+
+
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+# Cargar las librerías necesarias
+library(ggplot2)
+library(gganimate)
+library(gifski)
+
+# Definir la función Six-Hump Camel para minimización (2D)
+six_hump_camel <- function(v) {
+  x <- v[1]
+  y <- v[2]
+  term1 <- (4 - 2.1 * x^2 + (x^4) / 3) * x^2
+  term2 <- x * y
+  term3 <- (-4 + 4 * y^2) * y^2
+  return(term1 + term2 + term3)
+}
+
+
+# Parámetros de DE:
+
+NP <- 50            # Tamaño de la población
+max_iter <- 100     # Número máximo de iteraciones
+F <- 0.8            # Factor de escala para la mutación
+CR <- 0.9           # Probabilidad de cruce
+
+# Definir los límites del espacio de búsqueda (para x e y)
+lower <- c(-3, -2)
+upper <- c(3, 2)
+
+# Inicializar la población: cada candidato es un vector [x, y]
+set.seed(300)
+pop <- matrix(0, nrow = NP, ncol = 2)
+for (d in 1:2) {
+  pop[, d] <- runif(NP, min = lower[d], max = upper[d])
+}
+
+# Calcular el valor de la función para cada candidato
+pop_fitness <- apply(pop, 1, six_hump_camel)
+
+# Lista para guardar el historial (para animación)
+history <- list()
+
+# Guardar los estados iniciales
+history[[1]] <- data.frame(
+  iteration = 1,
+  candidate = 1:NP,
+  x = pop[, 1],
+  y = pop[, 2],
+  fitness = pop_fitness
+)
+
+
+# Bucle de Evolución Diferencial:
+
+for (iter in 2:max_iter) {
+  new_pop <- pop  # Nueva población (a actualizar)
+  
+  for (i in 1:NP) {
+    # Seleccionar tres índices distintos y distintos del i actual
+    idxs <- sample(setdiff(1:NP, i), 3, replace = FALSE)
+    a <- pop[idxs[1], ]
+    b <- pop[idxs[2], ]
+    c <- pop[idxs[3], ]
+    
+    # Mutación: crear el vector mutante
+    v <- a + F * (b - c)
+    
+    # Crossover: recombinar el vector objetivo (pop[i,]) y el vector mutante v
+    trial <- pop[i, ]
+    j_rand <- sample(1:2, 1)  # Aseguramos que se cruce al menos una dimensión
+    for (j in 1:2) {
+      if (runif(1) < CR || j == j_rand) {
+        trial[j] <- v[j]
+      }
+    }
+    
+    # Asegurarse de que el candidato trial esté dentro de los límites
+    trial <- pmax(trial, lower)
+    trial <- pmin(trial, upper)
+    
+    # Evaluar la función en el candidato trial
+    trial_fitness <- six_hump_camel(trial)
+    
+    # Selección: si la solución trial es mejor, reemplazar al candidato i
+    if (trial_fitness < pop_fitness[i]) {
+      new_pop[i, ] <- trial
+      pop_fitness[i] <- trial_fitness
+    }
+  }
+  
+  # Actualizar la población para la siguiente iteración
+  pop <- new_pop
+  
+  # Guardar el estado actual en el historial
+  history[[iter]] <- data.frame(
+    iteration = iter,
+    candidate = 1:NP,
+    x = pop[, 1],
+    y = pop[, 2],
+    fitness = pop_fitness
+  )
+}
+
+# Combinar la información de todas las iteraciones en un data frame
+history_df <- do.call(rbind, history)
+history_df$iteration <- as.factor(history_df$iteration)
+
+
+# Visualización: fondo y animación:
+
+# Crear una malla para representar el paisaje de la función Six-Hump Camel.
+x_seq <- seq(lower[1], upper[1], length.out = 100)
+y_seq <- seq(lower[2], upper[2], length.out = 100)
+grid <- expand.grid(x = x_seq, y = y_seq)
+grid$f <- apply(grid, 1, function(v) six_hump_camel(c(v[1], v[2])))
+
+# Crear el gráfico animado sin la barra de colores (se elimina la leyenda)
+p_anim <- ggplot() +
+  # Fondo: contornos rellenos de la función
+  geom_contour_filled(data = grid, aes(x = x, y = y, z = f), bins = 30) +
+  # Opcionalmente, se sobreponen contornos definidos en blanco para acentuar
+  geom_contour(data = grid, aes(x = x, y = y, z = f), bins = 30, color = "white", alpha = 0.5) +
+  # Población: se representan los candidatos en cada iteración en color rojo
+  geom_point(data = history_df, aes(x = x, y = y), color = "red", size = 2) +
+  labs(title = 'Evolución Diferencial: Iteración {closest_state}',
+       subtitle = "Optimización de la función de las seis jorobas de camello",
+       x = "x", y = "y") +
+  transition_states(iteration, state_length = 2, transition_length = 2) +
+  ease_aes('linear') +
+  theme(legend.position = "none")  
+
+# Renderizar y guardar la animación en un archivo GIF
+animate(p_anim, nframes = max_iter, fps = 10, renderer = gifski_renderer("de_six_hump_camel_no_legend.gif"))
+```
+    
+    
+#### **Figura -numero-:**
+En la figura se usa como método de optimización el algoritmo de evolución diferencial DE el cual se caracteriza por utilizar una población de soluciones candidatas que evolucionan mediante operadores de mutación, cruce (recombinación) y selección. A diferencia de otros algoritmos evolutivos, DE genera nuevas soluciones perturbando vectores existentes mediante diferencias escaladas entre otros miembros de la población. Storn, R., & Price, K. (1997).
+
+Esto quiere decir que el algoritmo de evolución diferencial sirve para encontrar los mejores valores posibles de la función, en este caso sus dos minimos globales que posee.
+
+
+Para entender la figura y el algoritmo se tiene que:
+**-** Primero, se asigna aleatoriamente una población o candidatos dentro del dominio de la función.
+**-** Luego, en cada iteración del algoritmo DE cada agente crea una versión modificada del mismo, que se mezcla con otros tres agentes/miembros de la población al azar en cualquier parte del plano
+**-** Este agente mutado se mezcla con el agente original, mezclando su información. Si esta información se define como un punto más bajo en el plano, este lo reemplaza, si no, el antiguo se queda.
+**-** El proceso se repite hasta que a través de cada iteración (generaciones) el grupo se va acercando cada vez al punto más bajo, en este caso el minimo global.  Storn, R., & Price, K. (1997).
+
+En la figura se puede percibir que en menos de 90 iteraciones se llegó a los dos minimos globales, además de como cada punto rojo (población) se cruzaba y mutaba para encontrar estos mínimos.
+
+De los anteriores algoritmos de optimización DE  es el único quien logró encontrar los dos mínimos globales de la función de las seis jorobas de camello.
+      
+      
+      
+      
+      
+## **Optimización con el método de evolución diferencial DE en tres dimensiones:**
+
+
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}      
+# Cargar las librerías necesarias
+library(ggplot2)
+library(gganimate)
+library(gifski)
+
+# Definir la función Six-Hump Camel extendida a 3D
+# La función original (2D) se extiende añadiéndole el término z²;
+# de esta forma: f(x, y, z) = SixHumpCamel(x, y) + z^2.
+six_hump_camel_3d <- function(v) {
+  x <- v[1]
+  y <- v[2]
+  z <- v[3]
+  term1 <- (4 - 2.1 * x^2 + (x^4) / 3) * x^2
+  term2 <- x * y
+  term3 <- (-4 + 4 * y^2) * y^2
+  term4 <- z^2
+  return(term1 + term2 + term3 + term4)
+}
+
+# Parámetros de DE:
+
+NP <- 50            # Tamaño de la población
+max_iter <- 100     # Número máximo de iteraciones
+F <- 0.8            # Factor de escala para la mutación
+CR <- 0.9           # Probabilidad de cruce
+
+# Definir los límites del espacio de búsqueda (para x, y y z)
+lower <- c(-3, -2, -1)
+upper <- c( 3,  2,  1)
+
+# Inicializar la población: cada candidato es un vector [x, y, z]
+set.seed(300)
+pop <- matrix(0, nrow = NP, ncol = 3)
+for (d in 1:3) {
+  pop[, d] <- runif(NP, min = lower[d], max = upper[d])
+}
+
+# Calcular el valor de la función para cada candidato
+pop_fitness <- apply(pop, 1, six_hump_camel_3d)
+
+# Lista para guardar el historial (para animación)
+history <- list()
+
+# Guardar el estado inicial
+history[[1]] <- data.frame(
+  iteration = 1,
+  candidate = 1:NP,
+  x = pop[, 1],
+  y = pop[, 2],
+  z = pop[, 3],
+  fitness = pop_fitness
+)
+
+
+# Bucle de Evolución Diferencial
+
+for (iter in 2:max_iter) {
+  new_pop <- pop  # Nueva población (a actualizar)
+  
+  for (i in 1:NP) {
+    # Seleccionar tres índices distintos y distintos del i actual
+    idxs <- sample(setdiff(1:NP, i), 3, replace = FALSE)
+    a <- pop[idxs[1], ]
+    b <- pop[idxs[2], ]
+    c <- pop[idxs[3], ]
+    
+    # Mutación: crear el vector mutante en 3D
+    v <- a + F * (b - c)
+    
+    # Crossover: recombinar el vector objetivo (pop[i,]) y el vector mutante v
+    # Se recorre cada dimensión (ahora j = 1, 2 y 3)
+    trial <- pop[i, ]
+    j_rand <- sample(1:3, 1)  # Aseguramos que al menos una dimensión sea del vector mutante
+    for (j in 1:3) {
+      if (runif(1) < CR || j == j_rand) {
+        trial[j] <- v[j]
+      }
+    }
+    
+    # Asegurarse de que el candidato trial esté dentro de los límites
+    trial <- pmax(trial, lower)
+    trial <- pmin(trial, upper)
+    
+    # Evaluar la función en el candidato trial
+    trial_fitness <- six_hump_camel_3d(trial)
+    
+    # Selección: si la solución trial es mejor, reemplazar al candidato i
+    if (trial_fitness < pop_fitness[i]) {
+      new_pop[i, ] <- trial
+      pop_fitness[i] <- trial_fitness
+    }
+  }
+  
+  # Actualizar la población para la siguiente iteración
+  pop <- new_pop
+  
+  # Guardar el estado actual en el historial
+  history[[iter]] <- data.frame(
+    iteration = iter,
+    candidate = 1:NP,
+    x = pop[, 1],
+    y = pop[, 2],
+    z = pop[, 3],
+    fitness = pop_fitness
+  )
+}
+
+# Combinar la información de todas las iteraciones en un data frame
+history_df <- do.call(rbind, history)
+history_df$iteration <- as.factor(history_df$iteration)
+
+# Visualización: fondo y animación
+
+# Crear una malla para representar el paisaje de la función Six-Hump Camel en el plano (x, y)
+# Se fija z = 0 para el fondo, de modo que se muestra la topografía de f(x,y,0)
+x_seq <- seq(lower[1], upper[1], length.out = 100)
+y_seq <- seq(lower[2], upper[2], length.out = 100)
+grid <- expand.grid(x = x_seq, y = y_seq)
+grid$f <- apply(grid, 1, function(v) six_hump_camel_3d(c(v[1], v[2], 0)))
+
+# Crear el gráfico animado:
+# Se muestra el fondo (contornos rellenos) correspondiente a f(x,y,0).
+# Luego se proyectan las posiciones de los candidatos en (x, y) y se colorean según su valor de z.
+p_anim <- ggplot() +
+  # Fondo: contornos rellenos de la función evaluada en z = 0
+  geom_contour_filled(data = grid, aes(x = x, y = y, z = f), bins = 30) +
+  geom_contour(data = grid, aes(x = x, y = y, z = f), bins = 30, color = "white", alpha = 0.5) +
+  # Población: se muestran los candidatos en (x, y) y se mapea el color al valor de z
+  geom_point(data = history_df, aes(x = x, y = y, color = z), size = 2) +
+  scale_color_gradientn(colors = c("blue", "cyan", "green", "yellow", "red"),
+                        name = "z") +
+  labs(title = 'Evolución Diferencial (3D): Iteración {closest_state}',
+       subtitle = "Optimización de la función de las seis jorobas de camello en 3D",
+       x = "x", y = "y") +
+  transition_states(iteration, state_length = 2, transition_length = 2) +
+  ease_aes('linear') +
+  theme(legend.position = "right")  # Se mantiene la leyenda para mostrar "z"
+
+# Renderizar y guardar la animación en un archivo GIF
+animate(p_anim, nframes = max_iter, fps = 10, renderer = gifski_renderer("de_six_hump_camel_3d.gif"))
+```
+
+
+
+#### **Figura -numero-:**
+
+
+En tres dimensiones se amplía la búsqueda y adaptación de la Evolución Diferencial a un espacio de mayor dimensión, introduce operaciones vectoriales en tres componentes Cada candidato es ahora un vector (x,y,z) y proporciona una visualización que proyecta información de la tercera dimensión a través del color. Los pasos fundamentales (mutación, cruce y selección) se mantienen, pero se ejecutan en un espacio más complejo. También se nota a medida de cada iteración como cambia el color en los agentes y descienden a los dos minimos globales hasta llegar al 0 en z.
+
+
+--------------------------------------------------------------------------
+
+
+
+
+## **Optimización con el método GA de algoritmos evolutivos en 2D**
+
+
+
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+# Lista para almacenar la evolución poblacional durante las generaciones
+population_history_2d <- list()
+ga_monitor <- function(obj) {
+  generation <- obj@iter
+  pop <- obj@population
+  if (!is.null(pop)) {
+    population_history_2d[[generation]] <<- data.frame(
+      generation = generation,
+      x = pop[, 1],
+      y = pop[, 2],
+      f = apply(pop, 1, function(v) six_hump_camel_2d(v[1], v[2]))
+    )
+  }
+}
+
+# Ejecutar GA (se maximiza la función fitness, por ello se usa -f)
+GA_2d <- ga(
+  type = "real-valued",
+  fitness = function(v) -six_hump_camel_2d(v[1], v[2]),
+  lower = c(-3, -2), upper = c(3, 2),
+  popSize = 50,
+  maxiter = 100,
+  monitor = ga_monitor,
+  seed = 134
+)
+
+# Combinar los datos poblacionales de cada generación
+pop_data_2d <- do.call(rbind, population_history_2d)
+pop_data_2d$generation <- as.factor(pop_data_2d$generation)
+
+# Animar la evolución poblacional (GA) en 2D
+pga2d <- ggplot() +
+  geom_contour(data = grid, aes(x = x, y = y, z = f), bins = 30, color = "grey") +
+  geom_point(data = pop_data_2d, aes(x = x, y = y), color = "darkgreen", size = 2) +
+  labs(title = 'Algoritmo Genético - Generación: {closest_state}') +
+  transition_states(pop_data_2d$generation, state_length = 1, transition_length = 1) +
+  ease_aes('linear')
+
+animate(pga2d, nframes = length(unique(pop_data_2d$generation)), fps = 5,
+        renderer = gifski_renderer("ga_2d.gif"))
+```
+
+
+#### **Figura -numero-:**
+
+Los Algoritmos Genéticos (Genetic Algorithms) son técnicas de optimización inspiradas en el proceso de evolución natural. Al igual que la selección natural en la biología, simulan cómo evolucionan las soluciones "mejores" con el tiempo. Holland, J. H. (1975).
+
+En este caso, el algoritmo se prueba con 50 individuos dentro de la población los cuales son representados por cada punto generado en la figura de manera aleatoria. A cada punto se le asigna un "valor" evaluando su función de aptitud o "fitness" (en esta situación se usa la función negativa porque se quiere encontrar es el minimo)
+
+**-** Los "puntos" escogidos son aquellos con  menor valor(según esta situación ya que se busca encontrar el minimo)
+
+**-** Estos "puntos" o individuos dentro de la población que ya fueron elegidos, se cruzan y dan lugar a hijos con mejores caracteristicas, esto, sucediendo de generación en generación mejorando con cada iteración.
+
+Esto da lugar a que el algoritmo encuentre el minimo global optimo según las generaciones.
