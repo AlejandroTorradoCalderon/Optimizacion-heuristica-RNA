@@ -1,0 +1,786 @@
+---
+title: "Optimización de la Función de Griewank usando Descenso por Gradiente"
+output: html_document
+---
+
+# Funciones de Prueba: Griewank
+
+La función de Griewank es una función de prueba común en optimización. Se define como:
+
+$$
+f(\mathbf{x}) = 1 + \frac{1}{4000} \sum_{i=1}^d x_i^2 - \prod_{i=1}^d \cos\left(\frac{x_i}{\sqrt{i}}\right)
+$$
+
+Su gradiente tiene componentes:
+
+$$
+\frac{\partial f}{\partial x_i} = \frac{x_i}{2000} - \frac{\prod_{j=1}^d \cos\left( \frac{x_j}{\sqrt{j}} \right)}{\cos\left( \frac{x_i}{\sqrt{i}} \right)} \times \frac{\sin\left( \frac{x_i}{\sqrt{i}} \right)}{\sqrt{i}}
+$$
+Donde:
+- \( d \) es la cantidad de dimensiones.
+- El dominio típico es \( x_i \in [-600, 600] \).
+- El mínimo global está en \( \mathbf{x} = (0,0,\ldots,0) \).
+
+---
+
+### Configuración del entorno y opciones de `knitr`
+
+En el primer chunk se define las opciones globales de `knitr` (para mostrar o no el código, mensajes y warnings), se crea un directorio temporal para almacenar archivos intermedios y cargamos todas las librerías que usaremos más adelante (visualización 2D/3D, animaciones, optimización, etc.).
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+options(bitmapType = "cairo")
+temp_dir <- tempdir()
+dir.create(temp_dir, showWarnings = FALSE)
+library(ggplot2)
+library(gganimate)
+library(gifski)
+library(dplyr)
+library(numDeriv)
+library(rgl)
+library(plotly)
+library(viridis)
+library(av)
+library(magick)
+library(plot3D)
+library(metR)
+library(GA)
+library(animation)
+library(png)
+library(pso)
+library(DEoptim)
+library(knitr)
+``` 
+
+### Definición de la función de prueba Griewank
+
+Se implementa la función de Griewank para evaluar el valor objetivo de cualquier vector `x`, requisito previo indispensable para todos los algoritmos de optimización.
+
+---
+
+```{r}
+griewank <- function(x) {
+  d <- length(x)
+  sum_term <- sum(x^2) / 4000
+  prod_term <- prod(cos(x / sqrt(1:d)))
+  return(sum_term - prod_term + 1)
+}
+```
+
+### Cálculo del gradiente de Griewank
+
+Aquí se define la función que devuelve el gradiente de Griewank, necesario para el descenso por gradiente.
+
+---
+
+```{r}
+grad_griewank <- function(x) {
+  numDeriv::grad(griewank, x)
+}
+```
+
+### Definición del método de Descenso por Gradiente para Griewank
+
+la función genérica `gradient_descent()`, que realiza el **descenso por gradiente**: parte de un punto inicial `x_init`, actualiza iterativamente restando el gradiente escalado por la tasa de aprendizaje `lr`, y detiene el proceso al alcanzar una tolerancia o máximo de iteraciones. Devuelve la trayectoria completa de puntos visitados.
+
+---
+
+
+```{r}
+
+gradient_descent <- function(f, grad_f, x_init, lr = 0.01, max_iter = 500, tol = 1e-6) {
+  x <- x_init
+  path <- list(x)
+  
+  for (i in 1:max_iter) {
+    grad <- grad_f(x)
+    x_new <- x - lr * grad
+    path[[i+1]] <- x_new
+    
+    if (sqrt(sum((x_new - x)^2)) < tol) {
+      break
+    }
+    
+    x <- x_new
+  }
+  
+  return(path)
+}
+
+```
+
+
+### Ejecución del Descenso por Gradiente en 2D para Griewank
+
+En este chunk se aplica el descenso por gradiente a un problema en **2 dimensiones**. Genera un punto inicial aleatorio en el dominio \([-600,600]^2\), llamamos a `gradient_descent()` con tasa de aprendizaje 0.05 y 200 iteraciones máximas, y guardamos la trayectoria en `path`.
+
+---
+
+```{r}
+# Ejecución del descenso en dos dimensiones
+set.seed(123)
+x_init <- runif(2, min = -600, max = 600)  # espacio en 2 dimensiones
+path <- gradient_descent(griewank, grad_griewank, x_init, lr = 0.05, max_iter = 200)
+```
+
+### Conversión de la trayectoria y animación 2D para Griewank
+
+Convierte la lista `path` en un **data frame** con `tibble` (`path_df`), para luego generar una animación en 2D usando `ggplot2` y `gganimate`. Guardamos el resultado como GIF y mostramos el **punto final** y su valor de la función.
+
+---
+
+```{r}
+library(tibble)
+
+# Convertimos el recorrido en un dataframe para la animación
+path_df <- tibble(iter = seq_along(path),
+                  x1 = sapply(path, `[`, 1),
+                  x2 = sapply(path, `[`, 2))
+
+# Crear la animación con ggplot y gganimate
+plot <- ggplot(path_df, aes(x = x1, y = x2)) +
+  geom_point(color = "red", size = 2) +
+  geom_path(color = "blue", alpha = 0.5) +
+  labs(title = "Descenso por Gradiente en la Función de Griewank",
+       x = "X1", y = "X2") +
+  theme_minimal() +
+  transition_reveal(iter)
+
+# Guardar como GIF
+animate(plot, renderer = gifski_renderer("descenso_griewank.gif"))
+
+# Último punto y evaluación de la función
+x_final <- tail(path, 1)[[1]]
+f_final <- griewank(x_final)
+
+
+# Crear tabla como tibble
+resultado <- tibble(
+  `Función` = "Griewank",
+  `Óptimo_Global` = "f(0, 0) ≈ 0",
+  `Óptimo_Obtenido` = paste0("(", round(x_final[1], 4), ", ", round(x_final[2], 4), ") con valor ", round(f_final, 4))
+)
+
+# Mostrar tabla centrada en HTML
+cat("<div style='text-align: center;'>")
+kable(resultado, format = "html", escape = FALSE, table.attr = "style='margin: auto; width: 60%;'")
+cat("</div>")
+
+```
+
+### Visualización y Descenso por Gradiente en 3D para Griewank
+
+Se genera un **mapa de calor 2D** (x1,x2) fijando x3=0, ejecuta el descenso por gradiente en **3 dimensiones**, construye la trayectoria proyectada en el plano (x1,x2) y anima el proceso. Finalmente, inserta el GIF resultante y muestra el óptimo encontrado.
+
+---
+
+
+```{r}
+# Usamos un valor fijo de x3 para el mapa de calor
+x3_fixed <- 0  
+
+# Rango del plano x1 y x2
+x_seq <- seq(-600, 600, length.out = 100)
+y_seq <- seq(-600, 600, length.out = 100)
+
+# Crear la grilla (x1, x2) con x3 fijo
+grid <- expand.grid(x1 = x_seq, x2 = y_seq)
+grid$z <- apply(grid, 1, function(row) griewank(c(row[1], row[2], x3_fixed)))
+
+# Ejecutamos el descenso por gradiente en 3 variables
+set.seed(123)
+x_init <- runif(3, min = -600, max = 600)
+path3d <- gradient_descent(griewank, grad_griewank, x_init, lr = 0.01, max_iter = 1000)
+
+# Convertimos el recorrido en un dataframe para graficar solo x1 y x2
+path_df <- tibble(iter = seq_along(path3d),
+                  x1 = sapply(path3d, `[`, 1),
+                  x2 = sapply(path3d, `[`, 2),
+                  x3 = sapply(path3d, `[`, 3))
+
+# Solo tomamos las iteraciones con x3 ≈ x3_fixed (puedes omitir si x3 es constante)
+# En este caso x3 cambia, pero el mapa usa el valor fijo
+gg <- ggplot() +
+  geom_raster(data = grid, aes(x = x1, y = x2, fill = z), interpolate = TRUE) +
+  scale_fill_viridis(option = "C", name = "z", direction = -1) +
+  geom_point(data = path_df, aes(x = x1, y = x2), color = "red", size = 2) +
+  geom_path(data = path_df, aes(x = x1, y = x2), color = "white", size = 1, alpha = 0.6) +
+  labs(title = "Descenso por Gradiente",
+       subtitle = "Iteración: {frame_along}",
+       x = "X1", y = "X2") +
+  theme_minimal() +
+  transition_reveal(along = iter)
+
+# Animar y guardar
+gif_path_des <- tempfile(fileext = ".gif")
+anim <- animate(gg, nframes = 200, fps = 10, width = 600, height = 500, units = "px", renderer = gifski_renderer(gif_path_des))
+
+# Incluir el GIF en el HTML
+knitr::include_graphics(gif_path_des)
+
+# Último punto del recorrido
+x_final <- tail(path3d, 1)[[1]]
+f_final <- griewank(x_final)
+
+# Crear tabla como tibble
+resultado <- tibble(
+  `Función` = "Griewank (3D)",
+  `Óptimo_Global` = "f(0, 0, 0) ≈ 0",
+  `Óptimo_Obtenido` = paste0(
+    "(", round(x_final[1], 4), ", ", 
+          round(x_final[2], 4), ", ", 
+          round(x_final[3], 4), ")<br>",
+    "con valor ", round(f_final, 4)
+  )
+)
+
+# Mostrar tabla centrada en HTML
+cat("<div style='text-align: center;'>")
+kable(resultado, format = "html", escape = FALSE, table.attr = "style='margin: auto; width: 60%;'")
+cat("</div>")
+
+```
+### Algoritmo Genético (GA) en 2D para Griewank
+
+Se crea un **GA** en 2 dimensiones con `GA::ga()`. Registra en cada generación la población y el mejor individuo, unimos todo el historial en `history_df`, y anima la evolución resaltando al mejor.
+
+---
+
+```{r}
+# Historial
+history <- list()
+
+# GA
+GAmodel <- ga(
+  type = "real-valued",
+  fitness = function(x) -griewank(x),
+  lower = c(-600, -600),
+  upper = c(600, 600),
+  popSize = 100,
+  maxiter = 200,
+  monitor = function(obj) {
+    pop <- obj@population
+    iter <- obj@iter
+    fitness <- apply(pop, 1, griewank)
+    best_index <- which.min(fitness)
+    is_best <- rep(FALSE, nrow(pop))
+    is_best[best_index] <- TRUE
+    history[[length(history) + 1]] <<- data.frame(
+      x = pop[,1],
+      y = pop[,2],
+      gen = iter,
+      fitness = fitness,
+      is_best = is_best
+    )
+  }
+)
+
+# Unir historia
+history_df <- do.call(rbind, history)
+
+# Gráfico animado con mejor individuo resaltado
+p <- ggplot(history_df, aes(x = x, y = y)) +
+  geom_point(aes(color = fitness), size = 2) +
+  geom_point(data = subset(history_df, is_best), color = "red", size = 4, shape = 21, stroke = 1.5) +
+  scale_color_viridis_c(option = "plasma") +
+  coord_cartesian(xlim = c(-600, 600), ylim = c(-600, 600)) +
+  labs(title = "GA en función Griewank", subtitle = "Generación: {closest_state}",
+       x = "x", y = "y", color = "Fitness") +
+  theme_minimal() +
+  transition_states(gen, transition_length = 1, state_length = 1, wrap = FALSE)
+
+# Guardar animación en archivo temporal
+gif_file_GA_2D <- tempfile(fileext = ".gif")
+anim <- animate(p, nframes = 200, fps = 10, width = 600, height = 500, units = "px", renderer = gifski_renderer(gif_file_GA_2D))
+
+# Incluir el GIF en el HTML
+knitr::include_graphics(gif_file_GA_2D)
+cat("Óptimo GA 2D encontrado en la iteración:", GAmodel@iter, "de", GAmodel@maxiter, "\n")
+cat("Óptimo GA 2D encontrado en:\n")
+print(GAmodel@solution)
+cat("Valor Griewank:", griewank(GAmodel@solution), "\n")
+```
+
+### Algoritmo Genético (GA) en 3D para Griewank
+
+Extiende el **GA** a 3 dimensiones: ajusta los parámetros de población e iteraciones, activamos optimización local (`optim=TRUE`), registramos el historial y procesamos `evol_data` para visualizar la evolución proyectada en 2D (z=0).
+
+---
+
+```{r}
+history <- list()
+
+GAmodel <- ga(
+  type = "real-valued",
+  fitness = function(x) -griewank(x),
+  lower = c(-600, -600, -600),
+  upper = c(600, 600, 600),
+  popSize = 150,
+  maxiter = 300,
+  optim = TRUE,
+  monitor = function(obj) {
+    pop <- obj@population
+    iter <- obj@iter
+    fitness <- apply(pop, 1, griewank)
+    best_index <- which.min(fitness)
+    is_best <- rep(FALSE, nrow(pop))
+    is_best[best_index] <- TRUE
+    history[[length(history) + 1]] <<- data.frame(
+      x = pop[,1],
+      y = pop[,2],
+      z = pop[,3],
+      gen = iter,
+      fitness = fitness,
+      is_best = is_best
+    )
+  }
+)
+
+# Unir en un solo dataframe
+evol_data <- do.call(rbind, history)
+```
+
+```{r}
+grid_data <- expand.grid(
+  x = seq(-600, 600, length.out = 150),
+  y = seq(-600, 600, length.out = 150)
+)
+grid_data$z <- apply(grid_data, 1, function(row) {
+  griewank(c(row["x"], row["y"], 0))  # se fija z=0 para ver en 2D
+})
+```
+
+```{r show-gif, echo=FALSE, out.width="100%"}
+# Creamos el gráfico animado
+p <- ggplot() +
+  geom_raster(data = grid_data, aes(x = x, y = y, fill = z), interpolate = TRUE) +
+  scale_fill_viridis(option = "plasma", direction = -1,    limits = c(0, quantile(grid_data$z, 0.95)),
+    oob = scales::squish) +
+  geom_point(data = evol_data, aes(x = x, y = y, color = -fitness, size = is_best), alpha = 0.7) +
+  geom_text(aes(x = 0, y = 0, label = "Óptimo Global"), color = "cyan", size = 4, fontface = "bold") +
+  scale_color_gradient(low = "yellow", high = "red") +
+  scale_size_manual(values = c("TRUE" = 4, "FALSE" = 2)) +
+  labs(
+    title = "Optimización de la Función GA Griewank 3D\nPaso: {closest_state}",
+    x = "X", y = "Y", fill = "Z",
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5, color = "gray20", size = 16),
+    plot.margin = unit(c(1, 1, 1.5, 1), "cm"),  # Aumenta el margen superior (tercer valor),
+    legend.position = "right"
+  ) +
+  transition_states(gen, transition_length = 2, state_length = 1)
+
+# Guardar animación en archivo temporal
+gif_file_GA_3D <- tempfile(fileext = ".gif")
+anim <- animate(p, nframes = 150, fps = 15, width = 1500, height = 1500,units = "px", renderer = gifski_renderer(gif_file_GA_3D))
+
+# Incluir el GIF en el HTML
+knitr::include_graphics(gif_file_GA_3D)
+
+cat("Óptimo GA 3D encontrado en:\n")
+print(GAmodel@solution)
+cat("Valor Griewank:", griewank(GAmodel@solution), "\n")
+```
+
+### Optimización de particulas (PSO) en 2D para Griewank
+
+Configura y ejecuta **PSO en 2 dimensiones** con `pso::psoptim()`. Crea funciones para registrar el historial de posiciones (`setup_history_recording()`), envoltorio de evaluación (`griewank_with_history()`), ejecuta el PSO y anima la trayectoria de la mejor partícula a lo largo de las iteraciones.
+
+---
+
+```{r}
+# Cargar librería necesaria
+library(pso)
+
+# Función para registrar el historial del PSO
+setup_history_recording <- function() {
+  history <- list()
+  iter <- 0
+  
+  record <- function(x, value) {
+    iter <<- iter + 1
+    history[[iter]] <<- data.frame(
+      x = x[1],
+      y = x[2],
+      gen = iter,
+      fitness = value,
+      is_best = TRUE
+    )
+    return(value)
+  }
+  
+  get_history <- function() {
+    return(do.call(rbind, history))
+  }
+  
+  return(list(
+    record = record,
+    get_history = get_history
+  ))
+}
+
+# Configurar el registro del historial
+history_tracker <- setup_history_recording()
+
+# Función wrapper para Griewank que registra el historial
+griewank_with_history <- function(x) {
+  value <- griewank(x)
+  history_tracker$record(x, value)
+  return(value)
+}
+
+# Ejecutar PSO
+set.seed(123)
+result_pso_2d <- psoptim(
+  par = rep(NA, 2),  # Valores iniciales aleatorios
+  fn = griewank_with_history,
+  lower = rep(-600, 2),
+  upper = rep(600, 2),
+  control = list(
+    trace = 1,
+    maxit = 100,
+    s = 80,  # Tamaño del enjambre
+    fnscale = 1,  # Minimización
+    trace.stats = TRUE,
+    REPORT = 1
+  )
+)
+
+# Obtener el historial completo
+history_pso_2d_df <- history_tracker$get_history()
+
+# Gráfico animado con mejor individuo resaltado
+p <- ggplot(history_pso_2d_df, aes(x = x, y = y)) +
+  geom_point(aes(color = fitness), size = 2) +
+  scale_color_viridis_c(option = "plasma") +
+  coord_cartesian(xlim = c(-600, 600), ylim = c(-600, 600)) +
+  labs(title = "PSO en función Griewank", subtitle = "Generación: {closest_state}",
+       x = "x", y = "y", color = "Fitness") +
+  theme_minimal() +
+  transition_states(gen, transition_length = 1, state_length = 1, wrap = FALSE)
+
+# Guardar animación en archivo temporal
+gif_file_PSO_2D <- tempfile(fileext = ".gif")
+anim <- animate(p, nframes = 200, fps = 10, width = 600, height = 500, units = "px", renderer = gifski_renderer(gif_file_PSO_2D))
+
+# Incluir el GIF en el HTML
+knitr::include_graphics(gif_file_PSO_2D)
+
+cat("Óptimo PSO 2D encontrado en:\n")
+print(result_pso_2d$par)
+cat("Valor Griewank:", result_pso_2d$value, "\n")
+```
+
+### Optimización de particulas (PSO) en 3D para Griewank
+
+Adapta el registro de historial para **PSO en 3 dimensiones** (`setup_history_recording_3d()`, `griewank_with_history_3d()`), ejecuta el PSO en 3D y anima la proyección en 2D (z=0) resaltando el óptimo global.
+
+---
+
+```{r}
+# Función para registrar el historial en 3D
+setup_history_recording_3d <- function() {
+  history <- list()
+  iter <- 0
+  
+  record <- function(x, value) {
+    iter <<- iter + 1
+    history[[iter]] <<- data.frame(
+      x = x[1],
+      y = x[2],
+      z = x[3],
+      gen = iter,
+      fitness = value,
+      is_best = TRUE
+    )
+    return(value)
+  }
+  
+  get_history <- function() {
+    return(do.call(rbind, history))
+  }
+  
+  return(list(
+    record = record,
+    get_history = get_history
+  ))
+}
+
+# Configurar el registro del historial
+history_tracker_3d <- setup_history_recording_3d()
+
+# Función wrapper para Griewank 3D que registra el historial
+griewank_with_history_3d <- function(x) {
+  value <- griewank(x)
+  history_tracker_3d$record(x, value)
+  return(value)
+}
+
+# Ejecutar PSO en 3D
+set.seed(123)
+result_pso_3d <- psoptim(
+  par = rep(NA, 3),  # Valores iniciales aleatorios
+  fn = griewank_with_history_3d,
+  lower = rep(-600, 3),
+  upper = rep(600, 3),
+  control = list(
+    trace = 1,
+    maxit = 100,
+    s = 80,  # Tamaño del enjambre
+    fnscale = 1,  # Minimización
+    trace.stats = TRUE,
+    REPORT = 1
+  )
+)
+
+# Obtener el historial completo
+history_pso_3d_df <- history_tracker_3d$get_history()
+
+# Preparar datos de fondo (igual que en el código original)
+grid_data <- expand.grid(
+  x = seq(-600, 600, length.out = 150),
+  y = seq(-600, 600, length.out = 150)
+)
+grid_data$z <- apply(grid_data, 1, function(row) {
+  griewank(c(row["x"], row["y"], 0))  # se fija z=0 para ver en 2D
+})
+
+p <- ggplot() +
+  geom_raster(data = grid_data, aes(x = x, y = y, fill = z), interpolate = TRUE) +
+  scale_fill_viridis(option = "plasma", direction = -1,    limits = c(0, quantile(grid_data$z, 0.95)),
+    oob = scales::squish) +
+  geom_point(data = history_pso_3d_df, aes(x = x, y = y, color = -fitness, size = is_best), alpha = 0.7) +
+  geom_text(aes(x = 0, y = 0, label = "Óptimo Global"), color = "cyan", size = 4, fontface = "bold") +
+  scale_color_gradient(low = "yellow", high = "red") +
+  scale_size_manual(values = c("TRUE" = 4, "FALSE" = 2)) +
+  labs(
+    title = "Optimización de la Función PSO Griewank 3D\nPaso: {closest_state}",
+    x = "X", y = "Y", fill = "Z",
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5, color = "gray20", size = 16),
+    plot.margin = unit(c(1, 1, 1.5, 1), "cm"),  # Aumenta el margen superior (tercer valor),
+    legend.position = "right"
+  ) +
+  transition_states(gen, transition_length = 2, state_length = 1)
+
+# Guardar animación en archivo temporal
+gif_file_PSO_3D <- tempfile(fileext = ".gif")
+anim <- animate(p, nframes = 150, fps = 15, width = 1500, height = 1500,units = "px", renderer = gifski_renderer(gif_file_PSO_3D))
+
+# Incluir el GIF en el HTML
+knitr::include_graphics(gif_file_PSO_3D)
+
+cat("Óptimo PSO 3D encontrado en:\n")
+print(result_pso_3d$par)
+cat("Valor Griewank:", result_pso_3d$value, "\n")
+```
+
+### Evolución Diferencial (DE) en 2D para Griewank
+
+Se define `extract_de_history()` para extraer el historial de un objeto `DEoptim`. Ejecuta la Evolución Diferencial en 2D, procesa el historial en `history_de_2d_df` y anima la evolución de la población en función de la generación.
+
+---
+
+```{r}
+
+# Función para extraer el historial de DEoptim
+extract_de_history <- function(de_result, dimensions) {
+  storepop <- de_result$member$storepop
+  history_df <- data.frame()
+  
+  for (gen in seq_along(storepop)) {
+    pop_matrix <- t(storepop[[gen]])
+    fitness <- apply(pop_matrix, 1, griewank)
+    best_idx <- which.min(fitness)
+    
+    gen_df <- data.frame(
+      x = pop_matrix[,1],
+      y = if(dimensions >= 2) pop_matrix[,2] else NA,
+      z = if(dimensions >= 3) pop_matrix[,3] else NA,
+      gen = gen,
+      fitness = fitness,
+      is_best = (1:nrow(pop_matrix) == best_idx)
+    )
+    history_df <- rbind(history_df, gen_df)
+  }
+  return(history_df)
+}
+
+# Ejecutar Evolución Diferencial en 2D
+set.seed(123)
+result_de_2d <- DEoptim(
+  fn = griewank,
+  lower = rep(-600, 2),
+  upper = rep(600, 2),
+  control = list(
+    strategy = 2,
+    NP = 80,        # Tamaño de población
+    itermax = 100,  # Iteraciones
+    storepopfrom = 1,
+    storepopfreq = 1,
+    trace = TRUE
+  )
+)
+
+# Procesar historial
+history_de_2d_df <- extract_de_history(result_de_2d, dimensions = 2)
+
+# Crear animación
+p_de_2d <- ggplot(history_de_2d_df, aes(x = x, y = y)) +
+  geom_point(aes(color = fitness), alpha = 0.7) +
+  scale_color_viridis_c(option = "plasma") +
+  scale_size_manual(values = c("TRUE" = 3, "FALSE" = 2)) +
+  coord_cartesian(xlim = c(-600, 600), ylim = c(-600, 600)) +
+  labs(title = "Evolución Diferencial en Griewank 2D",
+       subtitle = "Generación: {closest_state}",
+       x = "x", y = "y") +
+  theme_minimal() +
+  transition_states(gen, transition_length = 1, state_length = 1)
+
+# Guardar animación
+gif_file_DE_2D <- tempfile(fileext = ".gif")
+anim <- animate(p_de_2d, nframes = 200, fps = 10, width = 600, height = 500, units = "px", renderer = gifski_renderer(gif_file_DE_2D))
+knitr::include_graphics(gif_file_DE_2D)
+
+cat("Óptimo DE 2D encontrado en:\n")
+print(result_de_2d$optim$bestmem)
+cat("Valor Griewank:", result_de_2d$optim$bestval, "\n")
+```
+
+
+### Evolución Diferencial (DE) en 3D para Griewank
+
+Se ejecuta **DE en 3 dimensiones**, Se reutiliza `extract_de_history()`, procesa `history_de_3d_df`, prepara un fondo de mapa de calor proyectado en 2D (z=0) y anima la evolución de la población en cada generación.
+
+```{r}
+# Ejecutar Evolución Diferencial en 3D
+set.seed(123)
+result_de_3d <- DEoptim(
+  fn = griewank,
+  lower = rep(-600, 3),
+  upper = rep(600, 3),
+  control = list(
+    strategy = 2,
+    NP = 80,
+    itermax = 100,
+    storepopfrom = 1,
+    storepopfreq = 1,
+    trace = TRUE
+  )
+)
+
+# Procesar historial 3D
+history_de_3d_df <- extract_de_history(result_de_3d, dimensions = 3)
+
+# Preparar fondo de visualización (proyección 2D con z=0)
+grid_data <- expand.grid(
+  x = seq(-600, 600, length.out = 150),
+  y = seq(-600, 600, length.out = 150)
+)
+grid_data$z_background <- apply(grid_data, 1, function(row) {
+  griewank(c(row["x"], row["y"], 0))
+})
+
+# Crear animación 3D
+p_de_3d <- ggplot() +
+  geom_raster(data = grid_data, aes(x = x, y = y, fill = z_background), interpolate = TRUE) +
+  scale_fill_viridis(option = "plasma", direction = -1, 
+                    limits = c(0, quantile(grid_data$z_background, 0.95)),
+                    oob = scales::squish) +
+  geom_point(data = history_de_3d_df, aes(x = x, y = y), alpha = 0.7) +
+  geom_text(aes(x = 0, y = 0, label = "Óptimo Global"), color = "cyan", size = 4, fontface = "bold") +
+  scale_color_viridis_c(option = "plasma") +
+  scale_size_manual(values = c("TRUE" = 4, "FALSE" = 2)) +
+  labs(title = "Evolución Diferencial en Griewank 3D\nGeneración: {closest_state}",
+       x = "X", y = "Y") +
+  theme_minimal() +
+    theme(
+    plot.title = element_text(face = "bold", hjust = 0.5, color = "gray20"),
+    plot.margin = unit(c(1, 1, 1.5, 1), "cm"),  # Aumenta el margen superior (tercer valor),
+    legend.position = "right"
+  ) +
+  transition_states(gen, transition_length = 2, state_length = 1)
+
+# Guardar animación
+gif_file_DE_3D <- tempfile(fileext = ".gif")
+anim <- animate(p_de_3d, nframes = 150, fps = 15, width = 1500, height = 1500,units = "px", renderer = gifski_renderer(gif_file_DE_3D))
+knitr::include_graphics(gif_file_DE_3D)
+
+cat("Óptimo DE 2D encontrado en:\n")
+print(result_de_3d$optim$bestmem)
+cat("Valor Griewank:", result_de_2d$optim$bestval, "\n")
+```
+## 2. Análisis por descenso por Gradiente  
+
+### 2.1 Convergencia y sensibilidad  
+- **Paso a paso local**: avanza según el gradiente, por lo que se “atrae” al mínimo más cercano en su vecindario.  
+- **Impacto del _learning rate_ (lr)**:  
+  - Un lr muy alto rebota y diverge en zonas empinadas.  
+  - Un lr muy bajo ralentiza la convergencia en mesetas.  
+- **Número de evaluaciones**:  
+  - Cada iteración requiere **1 evaluación de f** (conceptualmente).  
+  - En 2D (lr = 0.05): ~200 iteraciones → ≲200 evals.  
+  - En 3D (lr = 0.01): hasta ~1 000 iteraciones → ≲1 000 evals.  
+
+### 2.2 ¿Por qué se estanca lejos del global?  
+1. **Mínimos locales dominantes**: la zona alrededor de (–254, 342) en 2D es un valle “lo suficientemente profundo” para detenerse con la tolerancia dada.  
+2. **Información limitada**: el gradiente solo “ve” su vecindario inmediato, sin capacidad de saltar a regiones más prometedoras.  
+
+### 2.3 Fortalezas y usos ideales  
+- **Precisión local**: refinar soluciones cuando ya estás cerca del óptimo global.  
+- **Coste bajo**: ideal para funciones donde f es costoso de evaluar.  
+- **Simplicidad**: fácil de implementar y de ajustar (lr, tol).
+
+---
+
+## 3. Análsis de los métodos heurísticos: GA, PSO y DE  
+
+Comparten la idea de **población/enjambre** y **operadores estocásticos**, pero cada uno tiene su mecánica propia:
+
+| Característica         | GA                                  | PSO                                 | DE                                  |
+|------------------------|-------------------------------------|-------------------------------------|-------------------------------------|
+| **Mecánica**           | Selección, cruza y muta             | Inercia + cognitivo + social        | Mutación diferencial + recombinación|
+| **Exploración temprana** | Alta                              | Media                               | Muy alta                            |
+| **Explotación tardía** | Media                               | Alta                                | Alta                                |
+| **Convergencia**       | Lenta-media                         | Rápida-media                        | Media                               |
+| **Diversidad**         | Controlada por mutación             | Mantiene diversidad via velocidad   | Balanceada por mutación diferencial |
+| **Evaluaciones de f**   | popSize×gen ≈ 20 000–45 000        | swarmSize×iter ≈ 8 000              | NP×iter ≈ 8 000                     |
+
+### 3.1 Calidad de la solución  
+- **2D**:  
+  - GA y DE → _f_final_ ~2×10⁻⁴  
+  - PSO → ~5×10⁻³  
+- **3D**:  
+  - GA y PSO → sub-10⁻²  
+  - DE → ~2×10⁻⁴  
+
+Todos alcanzan soluciones muy cercanas a 0, superando con creces al descenso por gradiente.
+
+### 3.2 Balance exploración–explotación  
+- **GA**: explora con cruces masivos; explota al reducir mutación.  
+- **PSO**: partículas oscilan entre su mejor posición y la del enjambre.  
+- **DE**: crea vectores mutados usando diferencias entre individuos, manteniendo diversidad.
+
+### 3.3 Costo computacional vs. Beneficio  
+- **Costoso**: decenas de miles de llamadas a f.  
+- **Beneficio**: alta probabilidad de hallar el mínimo global.  
+- **Regla práctica**: si evaluar f es barato y necesitas robustez global → heurísticos; si f es caro y tienes un buen punto inicial → gradiente.
+
+---
+
+## 4. Conclusiones y recomendaciones  
+1. **Híbridos**: usa un heurístico para acercarte a la cuenca del mínimo global, luego pule con descenso por gradiente.  
+2. **Ajustes de hiperparámetros**:  
+   - **GA**: popSize alto + crossover fuerte + mutación moderada.  
+   - **PSO**: inercia inicial alta y coeficientes cognitivo/social balanceados.  
+   - **DE**: factor de escala (F) y probabilidad de cruce (CR) en [0.5–0.9].  
+3. **Escalabilidad**: en dimensiones mayores, DE y PSO suelen necesitar menos generaciones que GA.  
+4. **Diagnóstico de convergencia**:  
+   - **Gradiente**: monitoriza norma del gradiente y cambio en f.  
+   - **Heurísticos**: trackea diversidad poblacional para detectar estancamiento.
