@@ -1,0 +1,2429 @@
+---
+title: "Trabajo 1: Optimización Heurística"
+author: 
+- "Wesly Zamira Huertas Salinas"
+- "Alejandro Torrado Calderón"
+- "Juan Pablo Muñoz Jimenez"
+date: "2025-04-28"
+output: 
+    html_document:
+    number_sections: true
+    fig_caption: true
+    toc: true
+    css: styles.css
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE}
+packages <- c(
+  "ggplot2", "gganimate", "gifski", "dplyr", "numDeriv", "rgl", 
+  "plotly", "viridis", "av", "magick", "plot3D", "metR", "GA", 
+  "animation", "png", "pso", "DEoptim", "knitr", "maps", "dplyr",
+  "googleway", "gor", "geosphere", "ggmap"
+)
+
+# Instalar los paquetes que no están instalados
+not_installed <- packages[!sapply(packages, require, character.only = TRUE)]
+
+if (length(not_installed) == 0) {
+  message("Todos los paquetes ya están instalados.")
+} else {
+  install.packages(not_installed)
+  message("Paquetes instalados: ", paste(not_installed, collapse = ", "))
+}
+
+```
+
+## 1. Función de Prueba: Griewank
+
+La función de Griewank es una función de prueba común en optimización. Se define como:
+
+$$
+f(\mathbf{x}) = 1 + \frac{1}{4000} \sum_{i=1}^d x_i^2 - \prod_{i=1}^d \cos\left(\frac{x_i}{\sqrt{i}}\right)
+$$
+
+Su gradiente tiene componentes:
+
+$$
+\frac{\partial f}{\partial x_i} = \frac{x_i}{2000} - \frac{\prod_{j=1}^d \cos\left( \frac{x_j}{\sqrt{j}} \right)}{\cos\left( \frac{x_i}{\sqrt{i}} \right)} \times \frac{\sin\left( \frac{x_i}{\sqrt{i}} \right)}{\sqrt{i}}
+$$
+Donde:
+- \( d \) es la cantidad de dimensiones.
+- El dominio típico es \( x_i \in [-600, 600] \).
+- El mínimo global está en \( \mathbf{x} = (0,0,\ldots,0) \).
+
+---
+
+### Configuración del entorno y opciones de `knitr`
+
+En el primer chunk se define las opciones globales de `knitr` (para mostrar o no el código, mensajes y warnings), se crea un directorio temporal para almacenar archivos intermedios y cargamos todas las librerías que usaremos más adelante (visualización 2D/3D, animaciones, optimización, etc.).
+
+---
+
+```{r, include=FALSE}
+library(ggplot2)
+library(gganimate)
+library(gifski)
+library(dplyr)
+library(numDeriv)
+library(rgl)
+library(plotly)
+library(viridis)
+library(av)
+library(magick)
+library(plot3D)
+library(metR)
+library(GA)
+library(animation)
+library(png)
+library(pso)
+library(DEoptim)
+library(knitr)
+``` 
+
+### Definición de la función de prueba Griewank
+
+Se implementa la función de Griewank para evaluar el valor objetivo de cualquier vector `x`, requisito previo indispensable para todos los algoritmos de optimización.
+
+---
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE}
+griewank <- function(x) {
+  d <- length(x)
+  sum_term <- sum(x^2) / 4000
+  prod_term <- prod(cos(x / sqrt(1:d)))
+  return(sum_term - prod_term + 1)
+}
+```
+
+### Cálculo del gradiente de Griewank
+
+Aquí se define la función que devuelve el gradiente de Griewank, necesario para el descenso por gradiente.
+
+---
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE}
+grad_griewank <- function(x) {
+  numDeriv::grad(griewank, x)
+}
+```
+
+### 1.1 Definición del método de Descenso por Gradiente para Griewank
+
+
+---
+
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE}
+
+gradient_descent <- function(f, grad_f, x_init, lr = 0.05, max_iter = 500, tol = 1e-6) {
+  x <- x_init
+  path <- list(x)
+  
+  for (i in 1:max_iter) {
+    grad <- grad_f(x)
+    x_new <- x - lr * grad
+    path[[i+1]] <- x_new
+    
+    if (sqrt(sum((x_new - x)^2)) < tol) {
+      break
+    }
+    
+    x <- x_new
+  }
+  
+  return(path)
+}
+
+```
+
+
+### Ejecución del Descenso por Gradiente en 2D para Griewank
+
+---
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE}
+# Ejecución del descenso en dos dimensiones
+set.seed(123)
+x_init <- runif(2, min = -600, max = 600)  # espacio en 2 dimensiones
+path <- gradient_descent(griewank, grad_griewank, x_init, lr = 0.05, max_iter = 200)
+```
+
+#### 1.1.1 Conversión de la trayectoria y animación 2D para Griewank
+
+
+---
+
+```{r griewank-plot, fig.align='center', fig.cap= "Fig 1. Descenso de gradiente Griewank (2D)", echo=FALSE,warning=FALSE,message=FALSE}
+library(tibble)
+
+# Convertimos el recorrido en un dataframe para la animación
+path_df_GRA_2D <- tibble(iter = seq_along(path),
+                  x1 = sapply(path, `[`, 1),
+                  x2 = sapply(path, `[`, 2))
+
+# Crear la animación con ggplot y gganimate
+plot <- ggplot(path_df_GRA_2D, aes(x = x1, y = x2)) +
+  geom_point(color = "red", size = 2) +
+  geom_path(color = "blue", alpha = 0.5) +
+  labs(title = "Descenso por Gradiente en la Función de Griewank",
+       x = "X1", y = "X2") +
+  theme_minimal() +
+  transition_reveal(iter)
+
+# Guardar como GIF
+animate(plot, renderer = gifski_renderer("descenso_griewank.gif"))
+
+# Calcular el valor de la función Griewank en cada iteración
+path_df_GRA_2D$fitness <- apply(path_df_GRA_2D[, c("x1", "x2")], 1, griewank)
+
+# Encontrar la mejor iteración
+min_index <- which.min(path_df_GRA_2D$fitness)
+best_iter <- path_df_GRA_2D$iter[min_index]
+best_x1 <- path_df_GRA_2D$x1[min_index]
+best_x2 <- path_df_GRA_2D$x2[min_index]
+best_val <- path_df_GRA_2D$fitness[min_index]
+
+# Imprimir resultados
+cat("Óptimo encontrado en la iteración:", best_iter - 1, "\n")
+cat("Coordenadas (x1, x2):", best_x1, best_x2, "\n")
+cat("Valor Griewank:", best_val, "\n")
+
+
+```
+
+#### 1.1.2 Visualización y Descenso por Gradiente en 3D para Griewank
+
+---
+
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE}
+# Usamos un valor fijo de x3 para el mapa de calor
+x3_fixed <- 0  
+
+# Rango del plano x1 y x2
+x_seq <- seq(-600, 600, length.out = 100)
+y_seq <- seq(-600, 600, length.out = 100)
+
+# Crear la grilla (x1, x2) con x3 fijo
+grid <- expand.grid(x1 = x_seq, x2 = y_seq)
+grid$z <- apply(grid, 1, function(row) griewank(c(row[1], row[2], x3_fixed)))
+
+# Ejecutamos el descenso por gradiente en 3 variables
+set.seed(123)
+x_init <- runif(3, min = -600, max = 600)
+path3d <- gradient_descent(griewank, grad_griewank, x_init, lr = 0.01, max_iter = 1000)
+
+# Convertimos el recorrido en un dataframe para graficar solo x1 y x2
+path_df_GRA_3D <- tibble(iter = seq_along(path3d),
+                  x1 = sapply(path3d, `[`, 1),
+                  x2 = sapply(path3d, `[`, 2),
+                  x3 = sapply(path3d, `[`, 3))
+
+
+
+```
+
+
+```{r griewank-plot-2, fig.align='center', fig.cap= "Fig 2. Descenso de gradiente Griewank (3D)", echo=FALSE,warning=FALSE,message=FALSE}
+# En este caso x3 cambia, pero el mapa usa el valor fijo
+gg <- ggplot() +
+  geom_raster(data = grid, aes(x = x1, y = x2, fill = z), interpolate = TRUE) +
+  scale_fill_viridis(option = "C", name = "z", direction = -1) +
+  geom_point(data = path_df_GRA_3D, aes(x = x1, y = x2), color = "red", size = 2) +
+  geom_path(data = path_df_GRA_3D, aes(x = x1, y = x2), color = "white", size = 1, alpha = 0.6) +
+  labs(title = "Descenso por Gradiente",
+       subtitle = "Iteración: {frame_along}",
+       x = "X1", y = "X2") +
+  theme_minimal() +
+  transition_reveal(along = iter)
+
+# Animar y guardar
+gif_path_des <- tempfile(fileext = ".gif")
+anim <- animate(gg, nframes = 200, fps = 10, width = 600, height = 500, units = "px", renderer = gifski_renderer(gif_path_des))
+
+# Incluir el GIF en el HTML
+knitr::include_graphics(gif_path_des)
+
+# Calcular el valor de la función Griewank en cada iteración (3 variables)
+path_df_GRA_3D$fitness <- apply(path_df_GRA_3D[, c("x1", "x2", "x3")], 1, griewank)
+
+# Encontrar la mejor iteración
+min_index_3d <- which.min(path_df_GRA_3D$fitness)
+best_iter_3d <- path_df_GRA_3D$iter[min_index_3d]
+best_x1_3d <- path_df_GRA_3D$x1[min_index_3d]
+best_x2_3d <- path_df_GRA_3D$x2[min_index_3d]
+best_x3_3d <- path_df_GRA_3D$x3[min_index_3d]
+best_val_3d <- path_df_GRA_3D$fitness[min_index_3d]
+
+# Imprimir resultados
+cat("Óptimo encontrado en la iteración:", best_iter_3d - 1, "\n")
+cat("Coordenadas (x1, x2, x3):", best_x1_3d, best_x2_3d, best_x3_3d, "\n")
+cat("Valor Griewank (3D):", best_val_3d, "\n")
+
+```
+### 1.2 Algoritmo Genético (GA) Griewank
+
+#### 1.2.1 Algoritmo Genético (GA) en 2D para Griewank
+
+---
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE}
+# Historial
+history <- list()
+
+# GA
+GAmodel <- ga(
+  type = "real-valued",
+  fitness = function(x) -griewank(x),
+  lower = c(-600, -600),
+  upper = c(600, 600),
+  popSize = 100,
+  maxiter = 200,
+  monitor = function(obj) {
+    pop <- obj@population
+    iter <- obj@iter
+    fitness <- apply(pop, 1, griewank)
+    best_index <- which.min(fitness)
+    is_best <- rep(FALSE, nrow(pop))
+    is_best[best_index] <- TRUE
+    history[[length(history) + 1]] <<- data.frame(
+      x = pop[,1],
+      y = pop[,2],
+      gen = iter,
+      fitness = fitness,
+      is_best = is_best
+    )
+  }
+)
+
+# Unir historia
+history_df <- do.call(rbind, history)
+```
+
+
+```{r griewank-plot-3, fig.align='center', fig.cap= "Fig 3. Optimización GA Griewank (2D)", echo=FALSE,warning=FALSE,message=FALSE}
+# Gráfico animado con mejor individuo resaltado
+p <- ggplot(history_df, aes(x = x, y = y)) +
+  geom_point(aes(color = fitness), size = 2) +
+  geom_point(data = subset(history_df, is_best), color = "red", size = 4, shape = 21, stroke = 1.5) +
+  scale_color_viridis_c(option = "plasma") +
+  coord_cartesian(xlim = c(-600, 600), ylim = c(-600, 600)) +
+  labs(title = "GA en función Griewank", subtitle = "Generación: {closest_state}",
+       x = "x", y = "y", color = "Fitness") +
+  theme_minimal() +
+  transition_states(gen, transition_length = 1, state_length = 1, wrap = FALSE)
+
+# Guardar animación en archivo temporal
+gif_file_GA_2D <- tempfile(fileext = ".gif")
+anim <- animate(p, nframes = 200, fps = 10, width = 600, height = 500, units = "px", renderer = gifski_renderer(gif_file_GA_2D))
+
+# Incluir el GIF en el HTML
+knitr::include_graphics(gif_file_GA_2D)
+# Encuentra el fitness mínimo en todo el historial
+min_fit <- min(history_df$fitness)
+
+# Filtra las filas que igualan ese fitness y toma la primera aparición
+first_best <- subset(history_df, fitness == min_fit)[1, ]
+
+cat("Primer óptimo encontrado en la iteración:", first_best$gen, "\n")
+cat("Coordenadas (x, y):", first_best$x, first_best$y, "\n")
+cat("Valor Griewank:", first_best$fitness, "\n")
+```
+
+#### 1.2.2 Algoritmo Genético (GA) en 3D para Griewank
+
+---
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE}
+history <- list()
+
+GAmodel <- ga(
+  type = "real-valued",
+  fitness = function(x) -griewank(x),
+  lower = c(-600, -600, -600),
+  upper = c(600, 600, 600),
+  popSize = 150,
+  maxiter = 300,
+  optim = TRUE,
+  monitor = function(obj) {
+    pop <- obj@population
+    iter <- obj@iter
+    fitness <- apply(pop, 1, griewank)
+    best_index <- which.min(fitness)
+    is_best <- rep(FALSE, nrow(pop))
+    is_best[best_index] <- TRUE
+    history[[length(history) + 1]] <<- data.frame(
+      x = pop[,1],
+      y = pop[,2],
+      z = pop[,3],
+      gen = iter,
+      fitness = fitness,
+      is_best = is_best
+    )
+  }
+)
+
+# Unir en un solo dataframe
+evol_data <- do.call(rbind, history)
+```
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE}
+grid_data <- expand.grid(
+  x = seq(-600, 600, length.out = 150),
+  y = seq(-600, 600, length.out = 150)
+)
+grid_data$z <- apply(grid_data, 1, function(row) {
+  griewank(c(row["x"], row["y"], 0))  # se fija z=0 para ver en 2D
+})
+```
+
+```{r griewank-plot-4, fig.align='center', fig.cap= "Fig 4. Optimización GA Griewank (3D)", echo=FALSE,warning=FALSE,message=FALSE}
+# Creamos el gráfico animado
+p <- ggplot() +
+  geom_raster(data = grid_data, aes(x = x, y = y, fill = z), interpolate = TRUE) +
+  scale_fill_viridis(option = "plasma", direction = -1,    limits = c(0, quantile(grid_data$z, 0.95)),
+    oob = scales::squish) +
+  geom_point(data = evol_data, aes(x = x, y = y, color = -fitness, size = is_best), alpha = 0.7) +
+  geom_text(aes(x = 0, y = 0, label = "Óptimo Global"), color = "cyan", size = 4, fontface = "bold") +
+  scale_color_gradient(low = "yellow", high = "red") +
+  scale_size_manual(values = c("TRUE" = 4, "FALSE" = 2)) +
+  labs(
+    title = "Optimización de la Función GA Griewank 3D\nPaso: {closest_state}",
+    x = "X", y = "Y", fill = "Z",
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5, color = "gray20", size = 16),
+    plot.margin = unit(c(1, 1, 1.5, 1), "cm"),  # Aumenta el margen superior (tercer valor),
+    legend.position = "right"
+  ) +
+  transition_states(gen, transition_length = 2, state_length = 1)
+
+# Guardar animación en archivo temporal
+gif_file_GA_3D <- tempfile(fileext = ".gif")
+anim <- animate(p, nframes = 150, fps = 15, width = 1500, height = 1500,units = "px", renderer = gifski_renderer(gif_file_GA_3D))
+
+# Incluir el GIF en el HTML
+knitr::include_graphics(gif_file_GA_3D)
+
+# Encuentra el fitness mínimo en todo el historial
+min_fit <- min(evol_data$fitness)
+
+# Filtra las filas que igualan ese fitness y toma la primera aparición
+first_best <- subset(evol_data, fitness == min_fit)[1, ]
+
+cat("Primer óptimo encontrado en la iteración:", first_best$gen, "\n")
+cat("Coordenadas (x, y):", first_best$x, first_best$y, "\n")
+cat("Valor Griewank:", first_best$fitness, "\n")
+```
+
+### 1.3 Optimización de particulas (PSO)
+
+#### 1.3.1 Optimización de particulas (PSO) en 2D para Griewank
+
+---
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE}
+# Cargar librería necesaria
+library(pso)
+
+# Función para registrar el historial del PSO
+setup_history_recording <- function() {
+  history <- list()
+  iter <- 0
+  
+  record <- function(x, value) {
+    iter <<- iter + 1
+    history[[iter]] <<- data.frame(
+      x = x[1],
+      y = x[2],
+      gen = iter,
+      fitness = value,
+      is_best = TRUE
+    )
+    return(value)
+  }
+  
+  get_history <- function() {
+    return(do.call(rbind, history))
+  }
+  
+  return(list(
+    record = record,
+    get_history = get_history
+  ))
+}
+
+# Configurar el registro del historial
+history_tracker <- setup_history_recording()
+
+# Función wrapper para Griewank que registra el historial
+griewank_with_history <- function(x) {
+  value <- griewank(x)
+  history_tracker$record(x, value)
+  return(value)
+}
+
+# Ejecutar PSO
+set.seed(123)
+result_pso_2d <- psoptim(
+  par = rep(NA, 2),  # Valores iniciales aleatorios
+  fn = griewank_with_history,
+  lower = rep(-600, 2),
+  upper = rep(600, 2),
+  control = list(
+    trace = 1,
+    maxit = 100,
+    s = 80,  # Tamaño del enjambre
+    fnscale = 1,  # Minimización
+    trace.stats = TRUE,
+    REPORT = 1
+  )
+)
+
+# Obtener el historial completo
+history_pso_2d_df <- history_tracker$get_history()
+```
+
+
+```{r griewank-plot-5, fig.align='center', fig.cap= "Fig 5. Optimización PSO Griewank (2D)", echo=FALSE,warning=FALSE,message=FALSE}
+# Gráfico animado con mejor individuo resaltado
+p <- ggplot(history_pso_2d_df, aes(x = x, y = y)) +
+  geom_point(aes(color = fitness), size = 2) +
+  scale_color_viridis_c(option = "plasma") +
+  coord_cartesian(xlim = c(-600, 600), ylim = c(-600, 600)) +
+  labs(title = "PSO en función Griewank", subtitle = "Generación: {closest_state}",
+       x = "x", y = "y", color = "Fitness") +
+  theme_minimal() +
+  transition_states(gen, transition_length = 1, state_length = 1, wrap = FALSE)
+
+# Guardar animación en archivo temporal
+gif_file_PSO_2D <- tempfile(fileext = ".gif")
+anim <- animate(p, nframes = 200, fps = 10, width = 600, height = 500, units = "px", renderer = gifski_renderer(gif_file_PSO_2D))
+
+# Incluir el GIF en el HTML
+knitr::include_graphics(gif_file_PSO_2D)
+
+# Encuentra el fitness mínimo en todo el historial
+min_fit <- min(history_pso_2d_df$fitness)
+
+# Filtra las filas que igualan ese fitness y toma la primera aparición
+first_best <- subset(history_pso_2d_df, fitness == min_fit)[1, ]
+
+cat("Primer óptimo encontrado en la iteración:", first_best$gen, "\n")
+cat("Coordenadas (x, y):", first_best$x, first_best$y, "\n")
+cat("Valor Griewank:", first_best$fitness, "\n")
+```
+
+#### 1.3.2 Optimización de particulas (PSO) en 3D para Griewank
+
+---
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE}
+# Función para registrar el historial en 3D
+setup_history_recording_3d <- function() {
+  history <- list()
+  iter <- 0
+  
+  record <- function(x, value) {
+    iter <<- iter + 1
+    history[[iter]] <<- data.frame(
+      x = x[1],
+      y = x[2],
+      z = x[3],
+      gen = iter,
+      fitness = value,
+      is_best = TRUE
+    )
+    return(value)
+  }
+  
+  get_history <- function() {
+    return(do.call(rbind, history))
+  }
+  
+  return(list(
+    record = record,
+    get_history = get_history
+  ))
+}
+
+# Configurar el registro del historial
+history_tracker_3d <- setup_history_recording_3d()
+
+# Función wrapper para Griewank 3D que registra el historial
+griewank_with_history_3d <- function(x) {
+  value <- griewank(x)
+  history_tracker_3d$record(x, value)
+  return(value)
+}
+
+# Ejecutar PSO en 3D
+set.seed(123)
+result_pso_3d <- psoptim(
+  par = rep(NA, 3),  # Valores iniciales aleatorios
+  fn = griewank_with_history_3d,
+  lower = rep(-600, 3),
+  upper = rep(600, 3),
+  control = list(
+    trace = 1,
+    maxit = 100,
+    s = 80,  # Tamaño del enjambre
+    fnscale = 1,  # Minimización
+    trace.stats = TRUE,
+    REPORT = 1
+  )
+)
+
+
+# Obtener el historial completo
+history_pso_3d_df <- history_tracker_3d$get_history()
+```
+
+
+```{r griewank-plot-6, fig.align='center', fig.cap= "Fig 6. Optimización PSO Griewank (3D)", echo=FALSE,warning=FALSE,message=FALSE}
+# Preparar datos de fondo 
+grid_data <- expand.grid(
+  x = seq(-600, 600, length.out = 150),
+  y = seq(-600, 600, length.out = 150)
+)
+grid_data$z <- apply(grid_data, 1, function(row) {
+  griewank(c(row["x"], row["y"], 0))  # se fija z=0 para ver en 2D
+})
+
+p <- ggplot() +
+  geom_raster(data = grid_data, aes(x = x, y = y, fill = z), interpolate = TRUE) +
+  scale_fill_viridis(option = "plasma", direction = -1,    limits = c(0, quantile(grid_data$z, 0.95)),
+    oob = scales::squish) +
+  geom_point(data = history_pso_3d_df, aes(x = x, y = y, color = -fitness, size = is_best), alpha = 0.7) +
+  geom_text(aes(x = 0, y = 0, label = "Óptimo Global"), color = "cyan", size = 4, fontface = "bold") +
+  scale_color_gradient(low = "yellow", high = "red") +
+  scale_size_manual(values = c("TRUE" = 4, "FALSE" = 2)) +
+  labs(
+    title = "Optimización de la Función PSO Griewank 3D\nPaso: {closest_state}",
+    x = "X", y = "Y", fill = "Z",
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5, color = "gray20", size = 16),
+    plot.margin = unit(c(1, 1, 1.5, 1), "cm"),  # Aumenta el margen superior (tercer valor),
+    legend.position = "right"
+  ) +
+  transition_states(gen, transition_length = 2, state_length = 1)
+
+# Guardar animación en archivo temporal
+gif_file_PSO_3D <- tempfile(fileext = ".gif")
+anim <- animate(p, nframes = 150, fps = 15, width = 1500, height = 1500,units = "px", renderer = gifski_renderer(gif_file_PSO_3D))
+
+# Incluir el GIF en el HTML
+knitr::include_graphics(gif_file_PSO_3D)
+
+# Encuentra el fitness mínimo en todo el historial
+min_fit <- min(history_pso_3d_df$fitness)
+
+# Filtra las filas que igualan ese fitness y toma la primera aparición
+first_best <- subset(history_pso_3d_df, fitness == min_fit)[1, ]
+
+cat("Primer óptimo encontrado en la iteración:", first_best$gen, "\n")
+cat("Coordenadas (x, y):", first_best$x, first_best$y, "\n")
+cat("Valor Griewank:", first_best$fitness, "\n")
+```
+
+### 1.4 Evolución Diferencial (DE) en 2D para Griewank
+
+#### 1.4.1 Evolución Diferencial (DE) 
+
+---
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE}
+# Función para extraer el historial de DEoptim
+extract_de_history <- function(de_result, dimensions) {
+  storepop <- de_result$member$storepop
+  history_df <- data.frame()
+  
+  for (gen in seq_along(storepop)) {
+    pop_matrix <- t(storepop[[gen]])
+    fitness <- apply(pop_matrix, 1, griewank)
+    best_idx <- which.min(fitness)
+    
+    gen_df <- data.frame(
+      x = pop_matrix[,1],
+      y = if(dimensions >= 2) pop_matrix[,2] else NA,
+      z = if(dimensions >= 3) pop_matrix[,3] else NA,
+      gen = gen,
+      fitness = fitness,
+      is_best = (1:nrow(pop_matrix) == best_idx)
+    )
+    history_df <- rbind(history_df, gen_df)
+  }
+  return(history_df)
+}
+
+# Ejecutar Evolución Diferencial en 2D
+set.seed(123)
+result_de_2d <- DEoptim(
+  fn = griewank,
+  lower = rep(-600, 2),
+  upper = rep(600, 2),
+  control = list(
+    strategy = 2,
+    NP = 80,        # Tamaño de población
+    itermax = 100,  # Iteraciones
+    storepopfrom = 1,
+    storepopfreq = 1,
+    trace = TRUE
+  )
+)
+
+# Procesar historial
+history_de_2d_df <- extract_de_history(result_de_2d, dimensions = 2)
+```
+
+
+```{r griewank-plot-7, fig.align='center', fig.cap= "Fig 7. Optimización DE Griewank (2D)", echo=FALSE,warning=FALSE,message=FALSE}
+# Crear animación
+p_de_2d <- ggplot(history_de_2d_df, aes(x = x, y = y)) +
+  geom_point(aes(color = fitness), alpha = 0.7) +
+  scale_color_viridis_c(option = "plasma") +
+  scale_size_manual(values = c("TRUE" = 3, "FALSE" = 2)) +
+  coord_cartesian(xlim = c(-600, 600), ylim = c(-600, 600)) +
+  labs(title = "Evolución Diferencial en Griewank 2D",
+       subtitle = "Generación: {closest_state}",
+       x = "x", y = "y") +
+  theme_minimal() +
+  transition_states(gen, transition_length = 1, state_length = 1)
+
+# Guardar animación
+gif_file_DE_2D <- tempfile(fileext = ".gif")
+anim <- animate(p_de_2d, nframes = 200, fps = 10, width = 600, height = 500, units = "px", renderer = gifski_renderer(gif_file_DE_2D))
+knitr::include_graphics(gif_file_DE_2D)
+
+# Encuentra el fitness mínimo en todo el historial
+min_fit <- min(history_de_2d_df$fitness)
+
+# Filtra las filas que igualan ese fitness y toma la primera aparición
+first_best <- subset(history_de_2d_df, fitness == min_fit)[1, ]
+
+cat("Primer óptimo encontrado en la iteración:", first_best$gen, "\n")
+cat("Coordenadas (x, y):", first_best$x, first_best$y, "\n")
+cat("Valor Griewank:", first_best$fitness, "\n")
+```
+
+
+#### 1.4.2 Evolución Diferencial (DE) en 3D para Griewank
+
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE}
+# Ejecutar Evolución Diferencial en 3D
+set.seed(123)
+result_de_3d <- DEoptim(
+  fn = griewank,
+  lower = rep(-600, 3),
+  upper = rep(600, 3),
+  control = list(
+    strategy = 2,
+    NP = 80,
+    itermax = 100,
+    storepopfrom = 1,
+    storepopfreq = 1,
+    trace = TRUE
+  )
+)
+
+# Procesar historial 3D
+history_de_3d_df <- extract_de_history(result_de_3d, dimensions = 3)
+```
+
+
+```{r griewank-plot-8, fig.align='center', fig.cap= "Fig 8. Optimización DE Griewank (3D)", echo=FALSE,warning=FALSE,message=FALSE}
+# Preparar fondo de visualización (proyección 2D con z=0)
+grid_data <- expand.grid(
+  x = seq(-600, 600, length.out = 150),
+  y = seq(-600, 600, length.out = 150)
+)
+grid_data$z_background <- apply(grid_data, 1, function(row) {
+  griewank(c(row["x"], row["y"], 0))
+})
+
+# Crear animación 3D
+p_de_3d <- ggplot() +
+  geom_raster(data = grid_data, aes(x = x, y = y, fill = z_background), interpolate = TRUE) +
+  scale_fill_viridis(option = "plasma", direction = -1, 
+                    limits = c(0, quantile(grid_data$z_background, 0.95)),
+                    oob = scales::squish) +
+  geom_point(data = history_de_3d_df, aes(x = x, y = y), alpha = 0.7) +
+  geom_text(aes(x = 0, y = 0, label = "Óptimo Global"), color = "cyan", size = 4, fontface = "bold") +
+  scale_color_viridis_c(option = "plasma") +
+  scale_size_manual(values = c("TRUE" = 4, "FALSE" = 2)) +
+  labs(title = "Evolución Diferencial en Griewank 3D\nGeneración: {closest_state}",
+       x = "X", y = "Y") +
+  theme_minimal() +
+    theme(
+    plot.title = element_text(face = "bold", hjust = 0.5, color = "gray20"),
+    plot.margin = unit(c(1, 1, 1.5, 1), "cm"),  # Aumenta el margen superior (tercer valor),
+    legend.position = "right"
+  ) +
+  transition_states(gen, transition_length = 2, state_length = 1)
+
+# Guardar animación
+gif_file_DE_3D <- tempfile(fileext = ".gif")
+anim <- animate(p_de_3d, nframes = 150, fps = 15, width = 1500, height = 1500,units = "px", renderer = gifski_renderer(gif_file_DE_3D))
+knitr::include_graphics(gif_file_DE_3D)
+
+# Encuentra el fitness mínimo en todo el historial
+min_fit <- min(history_de_3d_df$fitness)
+
+# Filtra las filas que igualan ese fitness y toma la primera aparición
+first_best <- subset(history_de_3d_df, fitness == min_fit)[1, ]
+
+cat("Primer óptimo encontrado en la iteración:", first_best$gen, "\n")
+cat("Coordenadas (x, y):", first_best$x, first_best$y, "\n")
+cat("Valor Griewank:", first_best$fitness, "\n")
+
+
+```
+
+### 1.5 Análisis de resultados de optimización a la función griewank  
+
+### 1.5.1 Descenso por Gradiente
+
+El descenso por gradiente mostró una gran eficiencia en términos de número de evaluaciones de la función objetivo: con apenas unas pocas miles de llamadas (alrededor de 800 en 2D y 6 000 en 3D, considerando la estimación de evaluaciones necesarias para aproximar numéricamente cada componente del gradiente), alcanzó su criterio de parada. Sin embargo, al aplicarse sobre la superficie altamente multimodal de la función de Griewank, quedó “atrapado” en mínimos locales lejanos al óptimo global, deteniéndose en valores cercanos a 45–48 en lugar de 0. Este comportamiento refleja que el descenso por gradiente explota eficazmente la información local y converge rápidamente cuando la función es suave o casi convexa, pero carece de un mecanismo intrínseco para explorar regiones lejanas en busca del mínimo global a menos que se complemente con reinicios o estrategias de exploración adicionales.
+
+### 1.5.2 Métodos Heurísticos (GA, PSO y DE)
+
+Los métodos heurísticos sacrificaron parte de la eficiencia local para ganar capacidad exploratoria global. El **Algoritmo Genético (GA)**, con poblaciones de 100 individuos durante 200 generaciones en 2D (≈20 000 evaluaciones) y de 150 durante 300 en 3D (≈45 000 evaluaciones), logró los valores finales más cercanos a cero (f≈1.1×10⁻⁴ en 2D y f≈0.028 en 3D). El **PSO**, con entre 7 000 y 8 000 evaluaciones, alcanzó también soluciones de alta calidad (f≈0.005 en 2D y f≈0.012 en 3D). La **Evolución Diferencial (DE)**, con un coste moderado de unas 8 000 evaluaciones, obtuvo mejoras sobre el gradiente (f≈1.55 en 2D, f≈2.06 en 3D) pero no tan fino como GA o PSO. En conjunto, estos heurísticos demostraron que su exploración poblacional puede escapar de los pozos locales de Griewank y acercarse al mínimo global, a costa de un mayor presupuesto computacional.
+
+
+
+
+##  **2.1 Función de las seis jorobas de camello:**
+La función de las seis jorobas de camello (Six-Hump Camel) es una función frecuentemente utilizada para evaluar el desempeño de algoritmos de optimización en espacios de búsqueda no triviales. es una función no convexa, multimodal y polinómica de grado cuatro. 
+
+
+
+**Se define como:**
+
+$$
+f(\mathbf{x}) = \left( 4 - 2.1x_1^2 + \frac{x_1^4}{3} \right)x_1^2 + x_1x_2 + \left( -4 + 4x_2^2 \right)x_2^2
+$$
+
+La función presenta seis regiones prominentes (jorobas) en su superficie, siendo esta una función no convexa, dando lugar a múltiples mínimos locales y dos mínimos globales bien definidos.
+Simon Fraser University. (s.f.). 
+
+**Para esta definición:**
+
+**-**La primera parte de la función, depende de x~1~ y genera curvaturas multiples.
+
+**-**La segunda parte de la función x~1~ y x~2~ es un acoplamiento lineal 
+
+**-**La tercera parte de la función x~2~ agrega simetría
+
+**-**Sus dos mínimos globales son (x~1~,x~2~)=(0.0898, -0.7126) y (x~1~,x~2~)=(-0.0898, 0.7126)
+con valor aproximado: $$f(x_1, x_2) \approx -1.0316$$
+
+#### **Representación más gráfica de la función con sus jorobas:**
+
+```{r sixhump-plot, fig.align='center', fig.cap= "_Fig 9. Función Six hump camel (2D)_", echo=FALSE,warning=FALSE,message=FALSE}
+# install.packages("plotly")
+library(plotly)
+library(GA)
+
+# Definir la función
+camel_six_hump <- function(x, y) {
+  term1 <- (4 - 2.1 * x^2 + (x^4) / 3) * x^2
+  term2 <- x * y
+  term3 <- (-4 + 4 * y^2) * y^2
+  return(term1 + term2 + term3)
+}
+
+# Crear una malla de puntos
+x <- seq(-2, 2, length.out = 200)
+y <- seq(-1, 1, length.out = 200)
+z <- outer(x, y, camel_six_hump)
+
+# Crear el gráfico 3D
+plot_ly(x = ~x, y = ~y, z = ~z) %>%
+  add_surface(colorscale = "Viridis") %>%
+  layout(title = "Función de las seis jorobas de camello:",
+         scene = list(
+           xaxis = list(title = "x"),
+           yaxis = list(title = "y"),
+           zaxis = list(title = "f(x, y)")
+         ))
+```  
+
+
+## **2.2 Optimización mediante descenso del gradiente:**
+
+Para gráficar y un entendimiento más fácil x~1~ = x y x~2~ = y 
+
+Así:
+
+$$
+f(x, y) = \left(4 - 2.1\, x^2 + \frac{x^4}{3}\right)x^2 + x\,y + \left(-4 + 4\, y^2\right)y^2
+$$
+
+#### **Gradiente de la función:**
+
+El gradiente es el vector de derivadas parciales:
+\[
+\nabla (x, y) = 
+\left( 
+\frac{\partial f}{\partial x}, \frac{\partial f}{\partial y}
+\right)
+\]
+**-** La derivada con respecto a x es:
+$$
+\frac{\partial f}{\partial x} = 8x - 8.4x^3 + 2x^5 + y
+$$
+**-** La derivada con respecto a y es: 
+$$
+\frac{\partial f}{\partial y} = x + 16y^3 - 8y
+$$
+
+
+
+
+
+
+#### **Método de descenso por gradiente en dos dimensiones:**
+
+
+
+```{r sixhump1-plot, fig.align='center', fig.cap= "_Fig 10. Descenso por gradiente Six hump camel (2D)_", echo=FALSE,warning=FALSE,message=FALSE}
+# --- Librerias necesarias 2D ---
+packages <- c("ggplot2", "gganimate", "gifski", "GA", "reshape2")
+installed <- packages %in% installed.packages()
+if(any(!installed)) install.packages(packages[!installed])
+library(ggplot2)
+library(gganimate)
+library(gifski)
+library(GA)
+library(reshape2)
+
+# --- Función Six-Hump Camel en 2D ---
+six_hump_camel_2d <- function(x, y) {
+  (4 - 2.1*x^2 + (x^4)/3) * x^2 + x*y + (-4 + 4*y^2) * y^2
+}
+
+# --- Gradiente analítico de la función en 2D ---
+grad_six_hump_camel_2d <- function(x, y) {
+  # Derivada parcial respecto a x:
+  dfx <- 8*x - 8.4*x^3 + 2*x^5 + y
+  # Derivada parcial respecto a y:
+  dfy <- x + 16*y^3 - 8*y
+  return(c(dfx, dfy))
+}
+
+# --- Función de descenso por gradiente para 2D ---
+gradient_descent_2d <- function(start, learning_rate = 0.01, tol = 1e-6, max_iter = 450) {
+  x <- start[1]; y <- start[2]
+  path <- data.frame(iter = 0, x = x, y = y, f = six_hump_camel_2d(x, y))
+  for (i in 1:max_iter) {
+    grad <- grad_six_hump_camel_2d(x, y)
+    x_new <- x - learning_rate * grad[1]
+    y_new <- y - learning_rate * grad[2]
+    # Si el cambio es menor que la tolerancia, se termina
+    if (sqrt((x_new - x)^2 + (y_new - y)^2) < tol) {
+      x <- x_new; y <- y_new
+      path <- rbind(path, data.frame(iter = i, x = x, y = y, f = six_hump_camel_2d(x, y)))
+      break
+    }
+    x <- x_new; y <- y_new
+    path <- rbind(path, data.frame(iter = i, x = x, y = y, f = six_hump_camel_2d(x, y)))
+  }
+  return(path)
+}
+
+# --- Parametros y path ---
+set.seed(420)
+start_2d <- c(runif(1, -3, 3), runif(1, -2, 2))
+path_gd_2d <- gradient_descent_2d(start_2d, learning_rate = 0.003, tol = 1e-6, max_iter = 250)
+
+# --- Datos para graficar ---
+x_seq <- seq(-3, 3, length.out = 100)
+y_seq <- seq(-2, 2, length.out = 100)
+grid <- expand.grid(x = x_seq, y = y_seq)
+grid$f <- with(grid, six_hump_camel_2d(x, y))
+
+# --- Animación del proceso de descenso por gradiente en 2D ---
+p2d <- ggplot() +
+  geom_contour(data = grid, aes(x = x, y = y, z = f), bins = 30, color = "grey") +
+  geom_path(data = path_gd_2d, aes(x = x, y = y), color = "red", size = 1) +
+  geom_point(data = path_gd_2d, aes(x = x, y = y), color = "blue", size = 2) +
+  labs(title = 'Descenso por gradiente - Iteración: {closest_state}') +
+  transition_states(path_gd_2d$iter, state_length = 1, transition_length = 1) +
+  ease_aes('linear')
+# GIF
+animate(p2d, nframes = nrow(path_gd_2d), fps = 20, renderer = gifski_renderer("gd_2d.gif"))
+
+subset(path_gd_2d, iter >= 239 & iter <= 241)
+```
+#### **Figura 10:**
+ 
+En la figura podemos observar el método de descenso por gradiente, un algoritmo de optimización iterativo que  busca encontrar el mínimo de una función diferenciable. Consiste en calcular el **gradiente**, que indica la dirección de mayor incremento, y actualizar los parámetros en sentido opuesto, es decir, moviéndose hacia la dirección de mayor descenso—mediante una tasa de aprendizaje que regula el tamaño de cada paso. **Este proceso se repite hasta que las actualizaciones son mínimas**.(IBM, s.f.)
+
+**-** En esta representación gráfica podemos observar que partiendo desde un punto aleatorio del plano, el descenso por gradiente generalmente busca el minimo local más cercano, en este caso encontró uno de los dos minimos globales que tiene esta función ubicado en (x,y)=(-0.0898, 0.7126)
+
+**-** El descenso por gradiente puede o no encontrar el valor óptimo global  de la **función de las seis jorobas de camello**, ya que este se "guiará" por el minimo local más cercano. Así que depende mucho de su condición inicial, en este caso, aleatoria.
+
+
+
+
+
+
+
+#### **Método de descenso por gradiente en tres dimensiones:**
+
+
+```{r sixhump2-plot, fig.align='center', fig.cap= "_Fig 11. Descenso por gradiente Six hump camel (3D)_", echo=FALSE,warning=FALSE,message=FALSE}
+# --- Instalar y cargar las librerías necesarias ---
+packages <- c("ggplot2", "gganimate", "gifski", "GA", "reshape2", "plotly")
+installed <- packages %in% installed.packages()
+if(any(!installed)) install.packages(packages[!installed])
+library(ggplot2)
+library(gganimate)
+library(gifski)
+library(GA)
+library(reshape2)
+library(plotly)
+
+# --- Función Six-Hump Camel en 2D ---
+six_hump_camel_2d <- function(x, y) {
+  (4 - 2.1 * x^2 + (x^4)/3) * x^2 + x*y + (-4 + 4*y^2) * y^2
+}
+
+# --- Gradiente analítico de la función en 2D ---
+grad_six_hump_camel_2d <- function(x, y) {
+  dfx <- 8 * x - 8.4 * x^3 + 2 * x^5 + y      # Derivada parcial respecto a x
+  dfy <- x + 16 * y^3 - 8 * y                   # Derivada parcial respecto a y
+  return(c(dfx, dfy))
+}
+
+# --- Función de descenso por gradiente para 2D ---
+gradient_descent_2d <- function(start, learning_rate = 0.01, tol = 1e-6, max_iter = 450) {
+  x <- start[1]; y <- start[2]
+  path <- data.frame(iter = 0, x = x, y = y, f = six_hump_camel_2d(x, y))
+  for (i in 1:max_iter) {
+    grad <- grad_six_hump_camel_2d(x, y)
+    x_new <- x - learning_rate * grad[1]
+    y_new <- y - learning_rate * grad[2]
+    # Si el cambio es menor que la tolerancia, se termina
+    if (sqrt((x_new - x)^2 + (y_new - y)^2) < tol) {
+      x <- x_new; y <- y_new
+      path <- rbind(path, data.frame(iter = i, x = x, y = y, f = six_hump_camel_2d(x, y)))
+      break
+    }
+    x <- x_new; y <- y_new
+    path <- rbind(path, data.frame(iter = i, x = x, y = y, f = six_hump_camel_2d(x, y)))
+  }
+  return(path)
+}
+
+# --- Ejecutar descenso por gradiente en 2D con condición inicial aleatoria ---
+set.seed(420)
+start_2d <- c(runif(1, -3, 3), runif(1, -2, 2))
+path_gd_2d <- gradient_descent_2d(start_2d, learning_rate = 0.003, tol = 1e-6, max_iter = 150)
+
+# --- Preparar la grilla para la superficie 3D ---
+# Aumentamos la resolución de la grilla
+x_seq <- seq(-3, 3, length.out = 200)
+y_seq <- seq(-2, 2, length.out = 200)
+z_vals <- outer(x_seq, y_seq, six_hump_camel_2d)
+
+# --- Visualización 3D interactiva con plotly y contornos ---
+fig <- plot_ly() %>%
+  add_surface(
+    x = ~x_seq, 
+    y = ~y_seq, 
+    z = ~z_vals,
+    opacity = 0.9,
+    colorscale = "Viridis",
+    contours = list(
+      z = list(
+        show = TRUE,            # Muestra los contornos en la dimensión z
+        usecolormap = TRUE,       # Usa la misma escala de colores para los contornos
+        highlightcolor = "#ff0000",
+        project = list(z = TRUE)
+      )
+    )
+  ) %>%
+  add_trace(data = path_gd_2d,
+            x = ~x, y = ~y, z = ~f,
+            type = "scatter3d",
+            mode = "lines+markers",
+            marker = list(color = "blue", size = 4),
+            line = list(color = "red", width = 4)) %>%
+  layout(title = "",
+         scene = list(
+           xaxis = list(title = "x"),
+           yaxis = list(title = "y"),
+           zaxis = list(title = "f(x, y)")
+         ))
+
+fig
+```
+#### **Figura 11:**
+**-** En tres dimensiones podemos ver una condición inicial diferente a la del gráfico en dos dimensiones. Esta condición inicial aleatoria se generó más cerca del minimo local (x,y)=(−0.08984, 0.71266) por lo tanto, el descenso por gradiente va a este punto mínimo local y no a uno de los minimos globales.
+ 
+"La función Six Hump Camel posee seis mínimos locales, de los cuales dos son mínimos globales. Este comportamiento multimodal la hace especialmente útil como caso de prueba en estudios y algoritmos de optimización, ya que permite evaluar la capacidad de estos para evitar converger únicamente en mínimos locales no globales." (Simon Fraser University, s.f.).
+
+**-** La línea azul ilustra el recorrido desde el punto de partida en el plano xyz hasta el mínimo local obtenido por el descenso por gradiente. Aunque es un mínimo, no es el global, lo que significa que existen otros puntos donde la función toma un valor inferior que sí son totalmente óptimos
+
+
+
+
+
+
+
+## **2.3.1 Optimización con el método de enjambre de particulas PSO en dos dimensiones:**
+
+
+
+```{r sixhump3-plot, fig.align='center', fig.cap= "_Fig 12. Método de enjambre de particulas (PSO) (2D)_", echo=FALSE,warning=FALSE,message=FALSE}
+# Cargar las librerías necesarias
+library(ggplot2)
+library(gganimate)
+library(gifski)
+
+# Definir la función Six-Hump Camel para minimización
+six_hump_camel <- function(v) {
+  x <- v[1]
+  y <- v[2]
+  term1 <- (4 - 2.1 * x^2 + (x^4) / 3) * x^2
+  term2 <- x * y
+  term3 <- (-4 + 4 * y^2) * y^2
+  return(term1 + term2 + term3)
+}
+
+# Parámetros del PSO
+n_particles <- 50      # Número de partículas en el enjambre
+max_iter    <- 70     # Número máximo de iteraciones
+w  <- 0.5            # Peso de inercia (valor comúnmente usado)
+c1 <- 1.49445          # Componente cognitivo (atracción hacia pbest)
+c2 <- 1.49445          # Componente social (atracción hacia gbest)
+
+# Definir los límites del espacio de búsqueda
+lower <- c(-3, -2)
+upper <- c(3, 2)
+
+# Inicializar posiciones y velocidades de las partículas de forma aleatoria
+set.seed(134)
+positions <- matrix(0, nrow = n_particles, ncol = 2)
+velocities <- matrix(0, nrow = n_particles, ncol = 2)
+for (d in 1:2) {
+  positions[, d] <- runif(n_particles, min = lower[d], max = upper[d])
+  # Inicializamos la velocidad en un rango relacionado con el tamaño del dominio
+  velocities[, d] <- runif(n_particles, min = -abs(upper[d]-lower[d]), 
+                           max = abs(upper[d]-lower[d]))
+}
+
+# Inicializar el “personal best” de cada partícula (posición y valor) 
+pbest_positions <- positions
+pbest_values <- apply(positions, 1, six_hump_camel)
+
+# Inicializar el “global best” tomando la mejor de las pbest
+gbest_index <- which.min(pbest_values)
+gbest_position <- pbest_positions[gbest_index, ]
+gbest_value <- pbest_values[gbest_index]
+
+# Crear una lista para almacenar la evolución de las posiciones de las partículas en cada iteración
+history <- list()
+
+# Bucle principal del PSO
+for (iter in 1:max_iter) {
+  # Guardar el estado actual de las partículas
+  history[[iter]] <- data.frame(
+    iteration = iter,
+    particle = 1:n_particles,
+    x = positions[, 1],
+    y = positions[, 2],
+    fitness = apply(positions, 1, six_hump_camel)
+  )
+  
+  # Actualizar cada partícula
+  for (i in 1:n_particles) {
+    # Generar números aleatorios para la componente cognitiva y social
+    r1 <- runif(2)
+    r2 <- runif(2)
+    
+    # Actualizar velocidad según la fórmula PSO
+    velocities[i, ] <- w * velocities[i, ] +
+      c1 * r1 * (pbest_positions[i, ] - positions[i, ]) +
+      c2 * r2 * (gbest_position - positions[i, ])
+    
+    # Actualizar la posición
+    positions[i, ] <- positions[i, ] + velocities[i, ]
+    
+    # Asegurarse de que las partículas se queden dentro de los límites
+    for (d in 1:2) {
+      if (positions[i, d] < lower[d]) {
+        positions[i, d] <- lower[d]
+        velocities[i, d] <- -velocities[i, d]
+      } else if (positions[i, d] > upper[d]) {
+        positions[i, d] <- upper[d]
+        velocities[i, d] <- -velocities[i, d]
+      }
+    }
+    
+    # Evaluar la función en la nueva posición
+    current_fitness <- six_hump_camel(positions[i, ])
+    
+    # Actualizar el "personal best" si se mejora la solución
+    if (current_fitness < pbest_values[i]) {
+      pbest_positions[i, ] <- positions[i, ]
+      pbest_values[i] <- current_fitness
+    }
+    
+    # Actualizar el "global best" si se encuentra una mejora
+    if (current_fitness < gbest_value) {
+      gbest_position <- positions[i, ]
+      gbest_value <- current_fitness
+    }
+  }
+}
+
+# Combinar en un solo data frame la información de todas las iteraciones para la animación
+history_df <- do.call(rbind, history)
+history_df$iteration <- as.factor(history_df$iteration)
+
+# Crear una malla para el gráfico de contorno del paisaje de la función
+x_seq <- seq(lower[1], upper[1], length.out = 100)
+y_seq <- seq(lower[2], upper[2], length.out = 100)
+grid <- expand.grid(x = x_seq, y = y_seq)
+grid$f <- apply(grid, 1, function(v) six_hump_camel(c(v[1], v[2])))
+
+# Generar el gráfico animado (GIF) que muestra la evolución de las partículas
+p <- ggplot() +
+  geom_contour(data = grid, aes(x = x, y = y, z = f), bins = 30, color = "grey") +
+  geom_point(data = history_df, aes(x = x, y = y), color = 'darkblue', size = 2) +
+  labs(title = 'Metodo de enjambre de particulas 2D - Iteración: {closest_state}',
+       x = "x", y = "y",
+       subtitle = "Cada punto representa la posición de una partícula") +
+  transition_states(iteration, state_length = 2, transition_length = 2) +
+  ease_aes('linear')
+
+# Renderizar y guardar la animación en un archivo GIF
+animate(p, nframes = max_iter, fps = 10, renderer = gifski_renderer("pso_six_hump_camel.gif"))
+
+```
+#### **Figura 12:**
+
+
+En la figura se puede observar el proceso de optimización por enjambre de particulas en dos dimensiones en el cual en este caso se generaron 50 particulas en posiciones aleatorias dentro del dominio y cada particula con una velocidad inicial aleatoria
+
+
+El algoritmo PSO guía mediante un equilibrio entre exploración y explotación. Es decir, cada partícula se mueve en el espacio de búsqueda basándose en tres componentes:
+
+**-Inercia:** Conserva una parte de su velocidad actual.
+
+**-Atracción personal** (pbest): Se dirige hacia la mejor posición que ha encontrado.
+
+**-Atracción social** (gbest): Se mueve hacia la mejor posición encontrada por todo el enjambre.
+
+En el proceso, cuando alguna partícula descubre una buena solución (un valor bajo de la función en nuestro problema de minimización), esa posición se convierte en el "global best". Una vez que se determina un gbest, las demás partículas se ven atraídas hacia esa región, lo que provoca que eventualmente converjan entorno a esa solución. Huang, H., Qiu, J., & Riedl, K. (2023).
+
+En este caso el gbest (global best) ubicado en (x,y)=(-0.0898, 0.7126) quien es el que se identifica  como el primer óptimo de la función en esta condición aleatoria en especifico.
+
+
+
+
+#### **2.3.2 Optimización con el método de enjambre de particulas PSO en tres dimensiones:**
+
+
+
+
+
+
+```{r sixhump4-plot, fig.align='center', fig.cap= "_Fig 13. Método de enjambre de particulas (PSO) (3D)_", echo=FALSE,warning=FALSE,message=FALSE}
+# Cargar librerías necesarias
+library(ggplot2)
+library(gganimate)
+library(gifski)
+
+# Definir la función Six-Hump Camel extendida a 3D
+# Se extiende añadiéndole el término z^2 para la tercera dimensión
+six_hump_camel_3d <- function(v) {
+  x <- v[1]
+  y <- v[2]
+  z <- v[3]
+  term1 <- (4 - 2.1 * x^2 + (x^4) / 3) * x^2
+  term2 <- x * y
+  term3 <- (-4 + 4 * y^2) * y^2
+  term4 <- z^2
+  return(term1 + term2 + term3 + term4)
+}
+
+# Parámetros del PSO en 3D
+n_particles <- 50      # Número de partículas
+max_iter    <- 50     # Número máximo de iteraciones
+w  <- 0.5            # Peso de inercia
+c1 <- 1.49445          # Componente cognitivo
+c2 <- 1.49445          # Componente social
+
+# Definir los límites del espacio de búsqueda para x, y y z
+lower <- c(-3, -2, -1)
+upper <- c( 3,  2,  1)
+
+# Inicializar posiciones y velocidades para las 3 dimensiones
+set.seed(300)
+positions <- matrix(0, nrow = n_particles, ncol = 3)
+velocities <- matrix(0, nrow = n_particles, ncol = 3)
+for (d in 1:3) {
+  positions[, d] <- runif(n_particles, min = lower[d], max = upper[d])
+  velocities[, d] <- runif(n_particles, min = -abs(upper[d]-lower[d]),
+                           max =  abs(upper[d]-lower[d]))
+}
+
+# Inicializar el “personal best” para cada partícula
+pbest_positions <- positions
+pbest_values <- apply(positions, 1, six_hump_camel_3d)
+
+# Inicializar el “global best” con la mejor solución
+gbest_index <- which.min(pbest_values)
+gbest_position <- pbest_positions[gbest_index, ]
+gbest_value <- pbest_values[gbest_index]
+
+# Lista para almacenar la evolución de las partículas
+history <- list()
+
+# Bucle principal del PSO
+for (iter in 1:max_iter) {
+  # Guardar el estado actual de las partículas (x, y, z y fitness)
+  history[[iter]] <- data.frame(
+    iteration = iter,
+    particle = 1:n_particles,
+    x = positions[, 1],
+    y = positions[, 2],
+    z = positions[, 3],
+    fitness = apply(positions, 1, six_hump_camel_3d)
+  )
+  
+  for (i in 1:n_particles) {
+    r1 <- runif(3)
+    r2 <- runif(3)
+    
+    velocities[i, ] <- w * velocities[i, ] +
+      c1 * r1 * (pbest_positions[i, ] - positions[i, ]) +
+      c2 * r2 * (gbest_position - positions[i, ])
+    
+    positions[i, ] <- positions[i, ] + velocities[i, ]
+    
+    # Asegurarse de que las partículas se mantengan en el dominio
+    for (d in 1:3) {
+      if (positions[i, d] < lower[d]) {
+        positions[i, d] <- lower[d]
+        velocities[i, d] <- -velocities[i, d]
+      } else if (positions[i, d] > upper[d]) {
+        positions[i, d] <- upper[d]
+        velocities[i, d] <- -velocities[i, d]
+      }
+    }
+    
+    current_fitness <- six_hump_camel_3d(positions[i, ])
+    
+    if (current_fitness < pbest_values[i]) {
+      pbest_positions[i, ] <- positions[i, ]
+      pbest_values[i] <- current_fitness
+    }
+    
+    if (current_fitness < gbest_value) {
+      gbest_position <- positions[i, ]
+      gbest_value <- current_fitness
+    }
+  }
+}
+
+# Combinar la información de todas las iteraciones
+history_df <- do.call(rbind, history)
+history_df$iteration <- as.factor(history_df$iteration)
+
+# Crear la malla para representar el fondo del plano.
+# Se evalúa la función en el plano (x, y) asumiendo z = 0 para representar
+# la topografía base de la función.
+x_seq <- seq(lower[1], upper[1], length.out = 100)
+y_seq <- seq(lower[2], upper[2], length.out = 100)
+grid <- expand.grid(x = x_seq, y = y_seq)
+grid$f <- apply(grid, 1, function(v) six_hump_camel_3d(c(v[1], v[2], 0)))
+
+# Generar el gráfico animado con ggplot2
+p <- ggplot() +
+  # Fondo: Relleno del raster donde se aplica la escala de colores personalizada.
+  geom_raster(data = grid, aes(x = x, y = y, fill = f), interpolate = TRUE) +
+  # Curvas de nivel para acentuar la topografía
+  geom_contour(data = grid, aes(x = x, y = y, z = f), bins = 30, color = "white", alpha = 0.5) +
+  # Partículas (se proyectan en x-y) con color rojo
+  geom_point(data = history_df, aes(x = x, y = y), color = "red", size = 2) +
+  # Usamos scale_fill_gradientn para definir la escala:
+  # Los valores bajos (mínimos locales/globales) se representan en tonos fríos,
+  # y los valores altos en tonos cálidos.
+  scale_fill_gradientn(colors = c("blue", "cyan", "green", "yellow", "red"),
+                       name = "z") +
+  labs(title = 'Metodo de enjambre de particulas 3D - Iteración: {closest_state}',
+       subtitle = "",
+       x = "x", y = "y") +
+  transition_states(iteration, state_length = 2, transition_length = 2) +
+  ease_aes('linear')
+
+# Renderizar y guardar la animación en un archivo GIF
+animate(p, nframes = max_iter, fps = 10, renderer = gifski_renderer("pso_six_hump_camel_3d_custom_colors.gif"))
+```
+
+#### **Figura 13:**
+
+En esta representación en tres dimensiones con una condición inicial aleatoria diferente a la de dos dimensiones, las particulas convergen en el segundo minimo global que posee la función de las seis jorobas de camello, exactamente en (x,y,z)=(0.0898, -0.7126, 0) en este caso, el minimo global óptimo.
+El cambio a tres dimensiones no supuso una diferencia mayor a su comportamiento comparado al de dos dimensiones.
+
+
+
+
+
+## **2.3.3 Optimización con el método de evolución diferencial DE en dos dimensiones:**
+
+
+
+
+
+```{r sixhump5-plot, fig.align='center', fig.cap= "_Fig 14. Método de evolución diferencial (DE) (2D)_", echo=FALSE,warning=FALSE,message=FALSE}
+# Cargar las librerías necesarias
+library(ggplot2)
+library(gganimate)
+library(gifski)
+
+# Definir la función Six-Hump Camel para minimización (2D)
+six_hump_camel <- function(v) {
+  x <- v[1]
+  y <- v[2]
+  term1 <- (4 - 2.1 * x^2 + (x^4) / 3) * x^2
+  term2 <- x * y
+  term3 <- (-4 + 4 * y^2) * y^2
+  return(term1 + term2 + term3)
+}
+
+
+# Parámetros de DE:
+
+NP <- 50            # Tamaño de la población
+max_iter <- 100     # Número máximo de iteraciones
+F <- 0.8            # Factor de escala para la mutación
+CR <- 0.9           # Probabilidad de cruce
+
+# Definir los límites del espacio de búsqueda (para x e y)
+lower <- c(-3, -2)
+upper <- c(3, 2)
+
+# Inicializar la población: cada candidato es un vector [x, y]
+set.seed(300)
+pop <- matrix(0, nrow = NP, ncol = 2)
+for (d in 1:2) {
+  pop[, d] <- runif(NP, min = lower[d], max = upper[d])
+}
+
+# Calcular el valor de la función para cada candidato
+pop_fitness <- apply(pop, 1, six_hump_camel)
+
+# Lista para guardar el historial (para animación)
+history <- list()
+
+# Guardar los estados iniciales
+history[[1]] <- data.frame(
+  iteration = 1,
+  candidate = 1:NP,
+  x = pop[, 1],
+  y = pop[, 2],
+  fitness = pop_fitness
+)
+
+
+# Bucle de Evolución Diferencial:
+
+for (iter in 2:max_iter) {
+  new_pop <- pop  # Nueva población (a actualizar)
+  
+  for (i in 1:NP) {
+    # Seleccionar tres índices distintos y distintos del i actual
+    idxs <- sample(setdiff(1:NP, i), 3, replace = FALSE)
+    a <- pop[idxs[1], ]
+    b <- pop[idxs[2], ]
+    c <- pop[idxs[3], ]
+    
+    # Mutación: crear el vector mutante
+    v <- a + F * (b - c)
+    
+    # Crossover: recombinar el vector objetivo (pop[i,]) y el vector mutante v
+    trial <- pop[i, ]
+    j_rand <- sample(1:2, 1)  # Aseguramos que se cruce al menos una dimensión
+    for (j in 1:2) {
+      if (runif(1) < CR || j == j_rand) {
+        trial[j] <- v[j]
+      }
+    }
+    
+    # Asegurarse de que el candidato trial esté dentro de los límites
+    trial <- pmax(trial, lower)
+    trial <- pmin(trial, upper)
+    
+    # Evaluar la función en el candidato trial
+    trial_fitness <- six_hump_camel(trial)
+    
+    # Selección: si la solución trial es mejor, reemplazar al candidato i
+    if (trial_fitness < pop_fitness[i]) {
+      new_pop[i, ] <- trial
+      pop_fitness[i] <- trial_fitness
+    }
+  }
+  
+  # Actualizar la población para la siguiente iteración
+  pop <- new_pop
+  
+  # Guardar el estado actual en el historial
+  history[[iter]] <- data.frame(
+    iteration = iter,
+    candidate = 1:NP,
+    x = pop[, 1],
+    y = pop[, 2],
+    fitness = pop_fitness
+  )
+}
+
+# Combinar la información de todas las iteraciones en un data frame
+history_df <- do.call(rbind, history)
+history_df$iteration <- as.factor(history_df$iteration)
+
+
+# Visualización: fondo y animación:
+
+# Crear una malla para representar el paisaje de la función Six-Hump Camel.
+x_seq <- seq(lower[1], upper[1], length.out = 100)
+y_seq <- seq(lower[2], upper[2], length.out = 100)
+grid <- expand.grid(x = x_seq, y = y_seq)
+grid$f <- apply(grid, 1, function(v) six_hump_camel(c(v[1], v[2])))
+
+# Crear el gráfico animado sin la barra de colores (se elimina la leyenda)
+p_anim <- ggplot() +
+  # Fondo: contornos rellenos de la función
+  geom_contour_filled(data = grid, aes(x = x, y = y, z = f), bins = 30) +
+  # Opcionalmente, se sobreponen contornos definidos en blanco para acentuar
+  geom_contour(data = grid, aes(x = x, y = y, z = f), bins = 30, color = "white", alpha = 0.5) +
+  # Población: se representan los candidatos en cada iteración en color rojo
+  geom_point(data = history_df, aes(x = x, y = y), color = "red", size = 2) +
+  labs(title = 'Evolución Diferencial: Iteración {closest_state}',
+       subtitle = "Optimización de la función de las seis jorobas de camello",
+       x = "x", y = "y") +
+  transition_states(iteration, state_length = 2, transition_length = 2) +
+  ease_aes('linear') +
+  theme(legend.position = "none")  
+
+# Renderizar y guardar la animación en un archivo GIF
+animate(p_anim, nframes = max_iter, fps = 10, renderer = gifski_renderer("de_six_hump_camel_no_legend.gif"))
+```
+    
+    
+#### **Figura 14:**
+En la figura se usa como método de optimización el algoritmo de evolución diferencial DE el cual se caracteriza por utilizar una población de soluciones candidatas que evolucionan mediante operadores de mutación, cruce (recombinación) y selección. A diferencia de otros algoritmos evolutivos, DE genera nuevas soluciones perturbando vectores existentes mediante diferencias escaladas entre otros miembros de la población. Storn, R., & Price, K. (1997).
+
+Esto quiere decir que el algoritmo de evolución diferencial sirve para encontrar los mejores valores posibles de la función, en este caso sus dos minimos globales que posee.
+
+
+Para entender la figura y el algoritmo se tiene que:
+**-** Primero, se asigna aleatoriamente una población o candidatos dentro del dominio de la función.
+
+**-** Luego, en cada iteración del algoritmo DE cada agente crea una versión modificada del mismo, que se mezcla con otros tres agentes/miembros de la población al azar en cualquier parte del plano.
+
+**-** Este agente mutado se mezcla con el agente original, mezclando su información. Si esta información se define como un punto más bajo en el plano, este lo reemplaza, si no, el antiguo se queda.
+
+**-** El proceso se repite hasta que a través de cada iteración (generaciones) el grupo se va acercando cada vez al punto más bajo, en este caso el minimo global.  Storn, R., & Price, K. (1997).
+
+En la figura se puede percibir que en menos de 50 iteraciones se llegó a los dos minimos globales, además de como cada punto rojo (población) se cruzaba y mutaba para encontrar estos mínimos.
+
+De los anteriores algoritmos de optimización DE  es el único quien logró encontrar los dos mínimos globales de la función de las seis jorobas de camello.
+      
+      
+      
+      
+      
+## **2.3.4 Optimización con el método de evolución diferencial DE en tres dimensiones:**
+
+
+
+```{r sixhump6-plot, fig.align='center', fig.cap= "_Fig 15. Método de evolución diferencial (DE) (3D)_", echo=FALSE,warning=FALSE,message=FALSE}      
+# Cargar las librerías necesarias
+library(ggplot2)
+library(gganimate)
+library(gifski)
+
+# Definir la función Six-Hump Camel extendida a 3D
+# La función original (2D) se extiende añadiéndole el término z²;
+# de esta forma: f(x, y, z) = SixHumpCamel(x, y) + z^2.
+six_hump_camel_3d <- function(v) {
+  x <- v[1]
+  y <- v[2]
+  z <- v[3]
+  term1 <- (4 - 2.1 * x^2 + (x^4) / 3) * x^2
+  term2 <- x * y
+  term3 <- (-4 + 4 * y^2) * y^2
+  term4 <- z^2
+  return(term1 + term2 + term3 + term4)
+}
+
+# Parámetros de DE:
+
+NP <- 50            # Tamaño de la población
+max_iter <- 100     # Número máximo de iteraciones
+F <- 0.8            # Factor de escala para la mutación
+CR <- 0.9           # Probabilidad de cruce
+
+# Definir los límites del espacio de búsqueda (para x, y y z)
+lower <- c(-3, -2, -1)
+upper <- c( 3,  2,  1)
+
+# Inicializar la población: cada candidato es un vector [x, y, z]
+set.seed(300)
+pop <- matrix(0, nrow = NP, ncol = 3)
+for (d in 1:3) {
+  pop[, d] <- runif(NP, min = lower[d], max = upper[d])
+}
+
+# Calcular el valor de la función para cada candidato
+pop_fitness <- apply(pop, 1, six_hump_camel_3d)
+
+# Lista para guardar el historial (para animación)
+history <- list()
+
+# Guardar el estado inicial
+history[[1]] <- data.frame(
+  iteration = 1,
+  candidate = 1:NP,
+  x = pop[, 1],
+  y = pop[, 2],
+  z = pop[, 3],
+  fitness = pop_fitness
+)
+
+
+# Bucle de Evolución Diferencial
+
+for (iter in 2:max_iter) {
+  new_pop <- pop  # Nueva población (a actualizar)
+  
+  for (i in 1:NP) {
+    # Seleccionar tres índices distintos y distintos del i actual
+    idxs <- sample(setdiff(1:NP, i), 3, replace = FALSE)
+    a <- pop[idxs[1], ]
+    b <- pop[idxs[2], ]
+    c <- pop[idxs[3], ]
+    
+    # Mutación: crear el vector mutante en 3D
+    v <- a + F * (b - c)
+    
+    # Crossover: recombinar el vector objetivo (pop[i,]) y el vector mutante v
+    # Se recorre cada dimensión (ahora j = 1, 2 y 3)
+    trial <- pop[i, ]
+    j_rand <- sample(1:3, 1)  # Aseguramos que al menos una dimensión sea del vector mutante
+    for (j in 1:3) {
+      if (runif(1) < CR || j == j_rand) {
+        trial[j] <- v[j]
+      }
+    }
+    
+    # Asegurarse de que el candidato trial esté dentro de los límites
+    trial <- pmax(trial, lower)
+    trial <- pmin(trial, upper)
+    
+    # Evaluar la función en el candidato trial
+    trial_fitness <- six_hump_camel_3d(trial)
+    
+    # Selección: si la solución trial es mejor, reemplazar al candidato i
+    if (trial_fitness < pop_fitness[i]) {
+      new_pop[i, ] <- trial
+      pop_fitness[i] <- trial_fitness
+    }
+  }
+  
+  # Actualizar la población para la siguiente iteración
+  pop <- new_pop
+  
+  # Guardar el estado actual en el historial
+  history[[iter]] <- data.frame(
+    iteration = iter,
+    candidate = 1:NP,
+    x = pop[, 1],
+    y = pop[, 2],
+    z = pop[, 3],
+    fitness = pop_fitness
+  )
+}
+
+# Combinar la información de todas las iteraciones en un data frame
+history_df <- do.call(rbind, history)
+history_df$iteration <- as.factor(history_df$iteration)
+
+# Visualización: fondo y animación
+
+# Crear una malla para representar el paisaje de la función Six-Hump Camel en el plano (x, y)
+# Se fija z = 0 para el fondo, de modo que se muestra la topografía de f(x,y,0)
+x_seq <- seq(lower[1], upper[1], length.out = 100)
+y_seq <- seq(lower[2], upper[2], length.out = 100)
+grid <- expand.grid(x = x_seq, y = y_seq)
+grid$f <- apply(grid, 1, function(v) six_hump_camel_3d(c(v[1], v[2], 0)))
+
+# Crear el gráfico animado:
+# Se muestra el fondo (contornos rellenos) correspondiente a f(x,y,0).
+# Luego se proyectan las posiciones de los candidatos en (x, y) y se colorean según su valor de z.
+p_anim <- ggplot() +
+  # Fondo: contornos rellenos de la función evaluada en z = 0
+  geom_contour_filled(data = grid, aes(x = x, y = y, z = f), bins = 30) +
+  geom_contour(data = grid, aes(x = x, y = y, z = f), bins = 30, color = "white", alpha = 0.5) +
+  # Población: se muestran los candidatos en (x, y) y se mapea el color al valor de z
+  geom_point(data = history_df, aes(x = x, y = y, color = z), size = 2) +
+  scale_color_gradientn(colors = c("blue", "cyan", "green", "yellow", "red"),
+                        name = "z") +
+  labs(title = 'Evolución Diferencial (3D): Iteración {closest_state}',
+       subtitle = "Optimización de la función six hump camel en 3D",
+       x = "x", y = "y") +
+  transition_states(iteration, state_length = 2, transition_length = 2) +
+  ease_aes('linear') +
+  theme(legend.position = "right")  # Se mantiene la leyenda para mostrar "z"
+
+# Renderizar y guardar la animación en un archivo GIF
+animate(p_anim, nframes = max_iter, fps = 10, renderer = gifski_renderer("de_six_hump_camel_3d.gif"))
+```
+
+
+
+#### **Figura 15:**
+
+
+En tres dimensiones se amplía la búsqueda y adaptación de la Evolución Diferencial a un espacio de mayor dimensión, introduce operaciones vectoriales en tres componentes Cada candidato es ahora un vector (x,y,z) y proporciona una visualización que proyecta información de la tercera dimensión a través del color. Los pasos fundamentales (mutación, cruce y selección) se mantienen, pero se ejecutan en un espacio más complejo. También se nota a medida de cada iteración como cambia el color en los agentes y descienden a los dos minimos globales hasta llegar al 0 en z.
+
+
+--------------------------------------------------------------------------
+
+
+
+
+## **2.3.5 Optimización con el método GA de algoritmos evolutivos en 2D**
+
+
+
+
+```{r sixhump7-plot, fig.align='center', fig.cap= "_Fig 16. Método de algoritmos geneticos (GA) (2D)_", echo=FALSE,warning=FALSE,message=FALSE}
+library(GA)
+# Lista para almacenar la evolución poblacional durante las generaciones
+population_history_2d <- list()
+ga_monitor <- function(obj) {
+  generation <- obj@iter
+  pop <- obj@population
+  if (!is.null(pop)) {
+    population_history_2d[[generation]] <<- data.frame(
+      generation = generation,
+      x = pop[, 1],
+      y = pop[, 2],
+      f = apply(pop, 1, function(v) six_hump_camel_2d(v[1], v[2]))
+    )
+  }
+}
+
+# Ejecutar GA (se maximiza la función fitness, por ello se usa -f)
+GA_2d <- ga(
+  type = "real-valued",
+  fitness = function(v) -six_hump_camel_2d(v[1], v[2]),
+  lower = c(-3, -2), upper = c(3, 2),
+  popSize = 50,
+  maxiter = 100,
+  monitor = ga_monitor,
+  seed = 134
+)
+
+# Combinar los datos poblacionales de cada generación
+pop_data_2d <- do.call(rbind, population_history_2d)
+pop_data_2d$generation <- as.factor(pop_data_2d$generation)
+
+# Animar la evolución poblacional (GA) en 2D
+pga2d <- ggplot() +
+  geom_contour(data = grid, aes(x = x, y = y, z = f), bins = 30, color = "grey") +
+  geom_point(data = pop_data_2d, aes(x = x, y = y), color = "darkgreen", size = 2) +
+  labs(title = 'Algoritmo Genético - Generación: {closest_state}') +
+  transition_states(pop_data_2d$generation, state_length = 1, transition_length = 1) +
+  ease_aes('linear')
+
+animate(pga2d, nframes = length(unique(pop_data_2d$generation)), fps = 5,
+        renderer = gifski_renderer("ga_2d.gif"))
+```
+
+
+#### **Figura 16:**
+
+Los Algoritmos Genéticos (Genetic Algorithms) son técnicas de optimización inspiradas en el proceso de evolución natural. Al igual que la selección natural en la biología, simulan cómo evolucionan las soluciones "mejores" con el tiempo. Holland, J. H. (1975).
+
+En este caso, el algoritmo se prueba con 50 individuos dentro de la población los cuales son representados por cada punto generado en la figura de manera aleatoria. A cada punto se le asigna un "valor" evaluando su función de aptitud o "fitness" (en esta situación se usa la función negativa porque se quiere encontrar es el minimo)
+
+**-** Los "puntos" escogidos son aquellos con  menor valor(según esta situación ya que se busca encontrar el minimo)
+
+**-** Estos "puntos" o individuos dentro de la población que ya fueron elegidos, se cruzan y dan lugar a hijos con mejores caracteristicas, esto, sucediendo de generación en generación mejorando con cada iteración.
+
+Esto da lugar a que el algoritmo encuentre el minimo global optimo según las generaciones.
+
+
+
+## **2.3.6 Optimización con el método GA de algoritmos evolutivos en 3D**
+
+
+```{r sixhump8-plot, fig.align='center', fig.cap= "_Fig 17. Método de algoritmos geneticos (GA) (3D)_", echo=FALSE,warning=FALSE,message=FALSE}
+# Cargar la librería plotly
+library(plotly)
+
+# Crear la malla para la superficie del Six-Hump Camel
+x_seq <- seq(-3, 3, length.out = 100)
+y_seq <- seq(-2, 2, length.out = 100)
+grid_df <- expand.grid(x = x_seq, y = y_seq)
+grid_df$z <- six_hump_camel_2d(grid_df$x, grid_df$y)
+
+# Transformar la columna z en una matriz para la función add_surface() de plotly
+z_matrix <- matrix(grid_df$z, nrow = length(x_seq), ncol = length(y_seq))
+
+# Crear el gráfico 3D animado:
+fig <- plot_ly() %>%
+  # Agregar la superficie de la función
+  add_surface(x = ~x_seq, y = ~y_seq, z = ~z_matrix,
+              opacity = 0.5, colorscale = "Viridis", showscale = FALSE) %>%
+  # Agregar los puntos (evolución poblacional) como marcadores
+  add_trace(data = pop_data_2d,
+            x = ~x, y = ~y, z = ~f,
+            type = "scatter3d", mode = "markers",
+            marker = list(color = "darkgreen", size = 4),
+            frame = ~generation) %>%
+  # Asegúrate de que layout se aplica al objeto fig correctamente
+  layout(title = "Evolución poblacional - GA en 3D",
+         scene = list(
+           xaxis = list(title = "X"),
+           yaxis = list(title = "Y"),
+           zaxis = list(title = "f(x, y)")
+         ))
+
+# Mostrar la animación interactiva
+fig
+
+```
+
+
+## **2.4 Conclusiones:**
+### **¿Qué aportaron los métodos de descenso por gradiente y qué aportaron los métodos heurísticos?**
+#### **Método por descenso del gradiente:**
+
+En la figura 10 donde se hace el recorrido del método de descenso por gradiente con condición inicial aleatoria en dos dimensiones, se aprecia que para alcanzar el valor objetivo __f(x,y)≈−1.0316__ tomó 241 iteraciones exactamente, Esto, solo en el caso de esta seed ya que en el caso de recorrido del algoritmo en tres dimensiones (figura 11) el método de descenso por gradiente se atascó en uno de los mínimos locales que posee la función de las seis jorobas de camello. Por lo tanto este método requiere condiciones especiales para que encuentre el valor objetivo óptimo porque depende de que tan cerca la condición aleatoria esté a uno de los dos minimos globales o minimos locales de la función para que descienda a estos.
+
+### **Métodos heurísticos:**
+
+#### **Optimización con el método de algoritmos evolutivos (GA):**
+
+Usando el método de algoritmos evolutivos (GA) para una población de 50 individuos, en dos dimensiones y tres dimensiones se llegó a la conclusión que en la generación numero 17 el algoritmo pudo alcanzar el valor objetivo de la función sin atascarse en mínimos locales. Se tiene en cuenta también que no converje al mismo tiempo en los dos minimos globales que tiene la función si no al primero que encuentra.
+
+#### **Optimización con el método de enjambre de particulas (PSO):**
+
+Por optimización mediante PSO se alcanzó el valor objetivo por primera vez a partir de la iteración 18 (con una población de 50 y una inercia de 0.5) la cual a partir de esta iteración se presenta un mejor fitness igual a __−1.0316__. En todos los casos de condición aleatoria el enjambre de particulas llegó a uno de los dos minimos globales.Por lo tanto, se concluye a partir de esto que:
+
+**-** En dos y tres dimensiones el algoritmo PSO siempre encontró el valor objetivo, pero no los dos mínimos globales al mismo tiempo que presenta la función de las seis jorobas de camello.
+
+**-** Con un ajuste de la inercia en el algoritmo a 0.5 se logró que todas las particulas converjan al primer minimo global encontrado por una de ellas.
+
+
+**-** A comparación del algoritmo de descenso por gradiente, la optimización por PSO si va exactamente a el valor óptimo de la función sin tener en cuenta una condición inicial aleatoria que lo beneficie.
+
+#### **Optimización con el método de evolución diferencial (DE):**
+
+Por optimización mediante DE se logró el valor objetivo en alrededor de 43 iteraciones con una población de 50 individuos.
+Tanto como en dos dimensiones y tres dimensiones el algoritmo encontró los dos mínimos globales de la función de una forma eficiente, dejando pasar mínimos locales y encontrando el valor óptimo de la función.
+A diferencia de los otros métodos heuristicos y metodo por descenso del gradiente presentados en este trabajo, el algoritmo de evolución diferencial fue el único en encontrar los dos mínimos globales de la función de las seis jorobas de camello
+
+
+## 3. Optimización combinatoria, Problema TSP (Travelling Salesman Problem)
+
+Un vendedor debe hacer un recorrido por todas y cada de las 13 ciudades principales de Colombia. 
+
+Utilice colonias de hormigas y algoritmos genéticos para encontrar el orden óptimo. El costo de desplazamiento entre ciudades es la suma del valor de la hora del vendedor (es un parámetro que debe estudiarse), el costo de los peajes y el costo del combustible. Cada equipo debe definir en qué carro hace el recorrido el vendedor y de allí extraer el costo del combustible.
+
+Adicionalmente represente con un gif animado o un video cómo se comporta la mejor solución usando un gráfico del recorrido en el mapa de Colombia.
+
+
+### Obtención de datos
+
+#### Ciudades principales de Colombia
+
+En primer lugar el análisis de la ruta más óptima para este problema se hará con las siguientes 13 ciudades (DANE, 2020):
+
+1. **Bogotá D.C.** – Capital del país y principal centro económico, político y cultural.  
+2. **Medellín** – Capital de Antioquia, reconocida por su innovación y desarrollo industrial.  
+3. **Cali** – Capital del Valle del Cauca, centro agroindustrial y cultural del suroccidente.  
+4. **Barranquilla** – Principal puerto del Caribe colombiano y epicentro industrial y logístico.  
+5. **Cartagena** – Ciudad portuaria y turística clave, con gran valor histórico.  
+6. **Cúcuta** – Capital de Norte de Santander, zona fronteriza con Venezuela.  
+7. **Bucaramanga** – Capital de Santander, reconocida por su calidad de vida y desarrollo urbano.  
+8. **Pereira** – Capital de Risaralda, eje del triángulo cafetero.  
+9. **Manizales** – Capital de Caldas, centro educativo y cultural del eje cafetero.  
+10. **Armenia** – Capital de Quindío, parte fundamental del eje cafetero.  
+11. **Ibagué** – Capital del Tolima, conocida por su tradición musical.  
+12. **Santa Marta** – Capital del Magdalena, con gran importancia turística y portuaria.  
+13. **Villavicencio** – Capital del Meta, puerta de entrada a los Llanos Orientales.
+
+La ubicación de cada una de estas ciudades se muestra a continuación:
+
+```{r mapa_Colombia, echo=FALSE,warning=FALSE,message=FALSE}
+
+library(maps)
+library(dplyr)
+
+
+# No margin
+par(mar=c(0,0,0,0))
+
+# World map
+map('world',
+    col="#f2f2f2", fill=TRUE, bg="white", lwd=0.05,
+    mar=rep(0,4),border=0, ylim=c(-0,15), xlim = c(-80,-70) 
+)
+
+
+coordenadas <- read.csv("./Datos/coordenadas_colombia.csv")
+
+
+points(x=coordenadas$Longitud, y=coordenadas$Latitud, col="slateblue", cex=1, pch=20)
+
+# Especificar la ruta según el orden de ciudades
+ruta <- c(1, 13,  4,  3, 10,  6,  7,  5, 11, 12,  2,  8,  9)  # Orden de ciudades según la ruta
+
+
+text(coordenadas$Longitud[ruta], coordenadas$Latitud[ruta], labels=coordenadas$Ciudad[ruta], pos=2, cex=0.6)
+
+print(coordenadas$Latitud[0])
+
+```
+
+#### Cálculo de la matriz de costos
+
+Teniendo en cuenta que el costo del desplazamiento entre ciudades es la suma del valor de la hora del vendedor, el costo de los peajes y el costo del combustible, se calculó el tiempo entre cada trayecto de acuerdo a datos de Google Maps, el costo de los peajes de acuerdo con ___, y el costo del combustible teniendo en cuenta el vehículo selesccionado para hacer el recorrido.
+
+##### Salario del vendedor
+
+Para el cálculo del salario del vendedor se creó una matriz con los tiempos de viaje en cada trayecto usando una API de Google Maps, como se muestra a continuación:
+
+```{r tiempos, echo=FALSE,warning=FALSE,message=FALSE}
+library(googleway)
+library(dplyr)
+
+ciudades <- c(
+  "Bogotá, Colombia", "Medellín, Colombia", "Cali, Colombia", "Barranquilla, Colombia",
+  "Bucaramanga, Colombia", "Manizales, Colombia", "Pereira, Colombia", "Cúcuta, Colombia",
+  "Pasto, Colombia", "Ibagué, Colombia", "Montería, Colombia", "Cartagena, Colombia",
+  "Villavicencio, Colombia"
+)
+
+coordenadas <- read.csv("./Datos/coordenadas_colombia.csv")
+
+# Tu API Key
+api_key <- "AIzaSyA-vP2YQgPKbZParebspMNES_GGgF_eaio"
+
+# Matriz vacía
+n <- length(ciudades)
+tiempo_matrix <- matrix(0, nrow = n, ncol = n)
+rownames(tiempo_matrix) <- coordenadas$Ciudad
+colnames(tiempo_matrix) <- coordenadas$Ciudad
+
+# Llenar la matriz usando la API
+for (i in 1:n) {
+  result <- google_distance(origins = ciudades[i],
+                            destinations = ciudades,
+                            key = api_key,
+                            mode = "driving")
+  
+  # Extraer las distancias en kilómetros
+  tiempo_h <- sapply(result$rows$elements, function(e) e$duration$value / 3600)
+  
+  tiempo_matrix[i, ] <- tiempo_h
+}
+
+tiempo_matrix_df <- as.data.frame(tiempo_matrix)
+print(tiempo_matrix_df)
+
+```
+
+Luego se multiplicó cada valor de esta matriz por el salario por hora del vendedor, que de acuerdo con (Salario Para Transporte De Carga En Colombia - Salario Medio, n.d.) es de 1'700.000 COP por mes, por lo que la hora sería a aproximadamente 9.700 COP, quedando de la siguiente forma:
+
+\[
+Costo_{vendedor} = tiempos \times 9700
+\]
+
+Siguiendo lo anterior la matríz de salarios del vendedor en pesos colombianos es la siguiente:
+
+```{r costo_vendedor, echo=FALSE,warning=FALSE,message=FALSE}
+salario_por_hora <- 9700
+costos_vendedor <- tiempo_matrix_df * salario_por_hora
+print(costos_vendedor)
+
+```
+
+##### Costo del combustible
+
+Para calcular el costo del combustible, primero se creó la matriz de distancias en kilómetros usando una API de Google Maps, como se muestra a continuación:
+
+```{r distancias, echo=FALSE,warning=FALSE,message=FALSE}
+
+library(googleway)
+library(dplyr)
+
+ciudades <- c(
+  "Bogotá, Colombia", "Medellín, Colombia", "Cali, Colombia", "Barranquilla, Colombia",
+  "Bucaramanga, Colombia", "Manizales, Colombia", "Pereira, Colombia", "Cúcuta, Colombia",
+  "Pasto, Colombia", "Ibagué, Colombia", "Montería, Colombia", "Cartagena, Colombia",
+  "Villavicencio, Colombia"
+)
+
+
+# Tu API Key
+api_key <- "AIzaSyA-vP2YQgPKbZParebspMNES_GGgF_eaio"
+
+# Matriz vacía
+n <- length(ciudades)
+dist_matrix <- matrix(0, nrow = n, ncol = n)
+rownames(dist_matrix) <- coordenadas$Ciudad
+colnames(dist_matrix) <- coordenadas$Ciudad
+
+# Llenar la matriz usando la API
+for (i in 1:n) {
+  result <- google_distance(origins = ciudades[i],
+                            destinations = ciudades,
+                            key = api_key,
+                            mode = "driving")
+  
+  # Extraer las distancias en kilómetros
+  dist_km <- sapply(result$rows$elements, function(e) e$distance$value / 1000)
+  
+  dist_matrix[i, ] <- dist_km
+}
+
+dist_matrix_df <- as.data.frame(dist_matrix)
+print(dist_matrix_df)
+
+```
+
+Luego, se seleccionó el modelo de vehículo que conducirá el vendedor, en este caso será una Renault Kangoo 1.5 que tiene un consumo de combustible de 4,5 litros cada 100 km de acuerdo con la empresa Renault. Adicionalmente, teniendo en cuenta que en Colombia el precio de la gasolina es de en promedio 15.827 COP el galón (Creg, 2025), y un galón tiene 3,78 litros, entonces, el precio de la gasolina por litro es de 4.187 COP. Por lo anterior, la ecuación para calcular el costo del combustible en cada ruta es:
+
+\[
+Costo_{combustible} = distancia [km] \times \frac{4,5}{100} [l/km] \times 4187 [COP/l]
+\]
+
+Por lo anterior, la matríz final de costos de combustible se presenta a continuación:
+
+```{r combustible, echo=FALSE,warning=FALSE,message=FALSE}
+costos_combustible <- dist_matrix_df * 4.5/100 * 4187
+print(costos_combustible)
+
+```
+##### Costo de los peajes
+
+Teniendo en cuenta los datos suministrados por (Peajes, 2025) se creó la siguiente matriz con los costos de peaje en COP por cada ruta:
+
+```{r peajes, echo=FALSE,warning=FALSE,message=FALSE}
+costos_peajes <- read.csv("./datos/peajes_colombia.csv")
+print(costos_peajes)
+```
+#### _
+Finalmente, la matriz de costos final se calcula de la siguiente forma:
+
+\[
+Costo_{total} = Costo_{vendedor} + Costo_{combustible} + Costo_{peajes}
+\]
+
+```{r costo_total, echo=FALSE,warning=FALSE,message=FALSE}
+
+costos_totales <- costos_vendedor + costos_combustible + costos_peajes[, -1]
+print(costos_totales)
+```
+ 
+### Algoritmo Ant System aplicado al problema TSP
+
+
+```{r Hormigas, echo=FALSE,warning=FALSE,message=FALSE}
+library(gor)
+
+n_ciudades <- 13
+matriz_normalizada <- costos_totales / 10000 # Se escala la matriz ya que tiene numeros muy grandes
+recorrido_optimizado <- search_tour_ants(matriz_normalizada,n_ciudades, 
+                                         K = 50,
+                                         N = 100,
+                                         beta = 5,
+                                         alpha = 1,
+                                         rho = 0.1,
+                                         )
+# Cerrar la ruta, agregando la conexión de la última ciudad con la primera
+recorrido_optimizado_cerrado <- c(recorrido_optimizado, recorrido_optimizado[1])
+
+# Mostrar la ruta cerrada
+print("Ruta cerrada:")
+print(recorrido_optimizado_cerrado)
+```
+Gráfico
+
+```{r plot_Hormigas, echo=FALSE,warning=FALSE,message=FALSE}
+library(maps)
+
+# No margin
+par(mar=c(0,0,0,0))
+
+# World map
+map('world',
+    col="#f2f2f2", fill=TRUE, bg="white", lwd=0.05,
+    mar=rep(0,4),border=0, ylim=c(-0,15), xlim = c(-80,-70) 
+)
+
+# Dplyr for data wrangling and pipe function
+library(dplyr)
+
+
+coordenadas <- read.csv("./Datos/coordenadas_colombia.csv")
+
+
+points(x=coordenadas$Longitud, y=coordenadas$Latitud, col="slateblue", cex=1, pch=20)
+
+# Especificar la ruta según el orden de ciudades
+ruta <- recorrido_optimizado$tour  # Orden de ciudades según la ruta
+
+library(geosphere)
+
+# Trazar las conexiones entre las ciudades siguiendo la ruta
+for (i in 1:(length(ruta) - 1)) {
+  # Obtener las coordenadas de las ciudades de la ruta
+  ciudad_inicio <- coordenadas[ruta[i], c("Longitud", "Latitud")]
+  ciudad_fin <- coordenadas[ruta[i + 1], c("Longitud", "Latitud")]
+  
+  # Calcular la ruta intermedia entre las dos ciudades
+  inter <- gcIntermediate(ciudad_inicio, ciudad_fin, n=50, addStartEnd=TRUE, breakAtDateLine=F)
+  
+  # Dibujar la línea en el mapa
+  lines(inter, col="slateblue", lwd=2)
+}
+
+text(coordenadas$Longitud[ruta], coordenadas$Latitud[ruta], labels=coordenadas$Ciudad[ruta], pos=4, cex=0.8)
+```
+
+```{r gif_Hormiga, echo=FALSE,warning=FALSE,message=FALSE}
+# Cargar librerías necesarias
+library(ggplot2)
+library(gganimate)
+library(ggmap)
+
+register_google(key = "AIzaSyA-vP2YQgPKbZParebspMNES_GGgF_eaio")
+
+# Coordenadas de las ciudades (añadir las coordenadas correspondientes)
+coordenadas <- data.frame(
+  Ciudad = c("Bogotá", "Medellín", "Cali", "Barranquilla", "Bucaramanga", 
+             "Manizales", "Pereira", "Cúcuta", "Pasto", "Ibagué", 
+             "Montería", "Cartagena", "Villavicencio"),
+  Latitud = c(4.7110, 6.2442, 3.4516, 10.9639, 7.1193, 5.0703, 4.8142, 7.8930, 1.2092, 4.4381, 8.7493, 10.3910, 4.1453),
+  Longitud = c(-74.0721, -75.5812, -76.5320, -74.7964, -73.1198, -75.5131, -75.6963, -72.5078, -77.2810, -75.2325, -75.8815, -75.4794, -73.6197)
+)
+
+# Inicializar la población y otras funciones del algoritmo genético (como el cálculo de la distancia y el costo)
+# ... (tu código para el algoritmo genético)
+
+# Supongamos que 'mejor_ruta' es la ruta más corta obtenida por el algoritmo genético
+mejor_ruta <- recorrido_optimizado$tour  # Esta es solo una ruta de ejemplo
+
+# Crear un dataframe para las ciudades en la mejor ruta
+ruta_ciudades <- coordenadas[mejor_ruta, ]
+
+# Crear el mapa de Colombia
+colombia_map <- get_map(location = "Colombia", zoom = 6)
+
+# Mapa estático con puntos de las ciudades
+start_map <- ggmap(colombia_map) +
+  geom_point(data = ruta_ciudades, aes(x = Longitud, y = Latitud, group = 1), size = 4, colour = "red", alpha = 0.5) +
+  geom_text(data = ruta_ciudades, aes(x = Longitud, y = Latitud, label = Ciudad), vjust = -1, size = 3, color = "black") +
+  ggtitle("Ruta más corta entre las ciudades de Colombia")
+
+# Animación de la ruta
+route_animation <- start_map + 
+  geom_path(data = ruta_ciudades, aes(x = Longitud, y = Latitud, group = 1), size = 1.5, colour = "blue") +
+  transition_reveal(along = seq_along(ruta_ciudades$Ciudad)) +
+  labs(title = "Ruta más corta: {frame_time}", subtitle = "Desde Bogotá hasta Villavicencio")
+
+# Mostrar la animación
+animate(route_animation, 
+        nframes = length(ruta_ciudades) * 10,  # Número de frames
+        fps = 10,  # Frames por segundo
+        end_pause = 20,  # Pausa al final
+        renderer = gifski_renderer("Best_ruta_SA.gif")) 
+
+
+```
+
+### Algoritmo evolutivo
+
+```{r pressure, echo=FALSE, warning=FALSE,message=FALSE}
+# Cargar librerías necesarias
+library(ggplot2)
+
+# Inicializar las coordenadas de las ciudades
+coordenadas <- data.frame(
+  Ciudad = c("Bogotá", "Medellín", "Cali", "Barranquilla", "Bucaramanga", 
+             "Manizales", "Pereira", "Cúcuta", "Pasto", "Ibagué", 
+             "Montería", "Cartagena", "Villavicencio"),
+  Latitud = c(4.7110, 6.2442, 3.4516, 10.9639, 7.1193, 5.0703, 4.8142, 7.8930, 1.2092, 4.4381, 8.7493, 10.3910, 4.1453),
+  Longitud = c(-74.0721, -75.5812, -76.5320, -74.7964, -73.1198, -75.5131, -75.6963, -72.5078, -77.2810, -75.2325, -75.8815, -75.4794, -73.6197)
+)
+
+# Número de generaciones y tamaño de población
+num_generaciones <- 100
+tamano_poblacion <- 50
+tasa_cruce <- 0.8
+tasa_mutacion <- 0.2
+num_ciudades <- nrow(coordenadas)
+
+# Función para calcular el costo de una ruta
+calcular_costo <- function(ruta) {
+  costo_total <- 0
+  for (i in 1:(length(ruta) - 1)) {
+    costo_total <- costo_total + costos_totales[ruta[i], ruta[i + 1]]
+  }
+  # Añadir el costo de regresar a la primera ciudad
+  costo_total <- costo_total + costos_totales[ruta[length(ruta)], ruta[1]]
+  return(costo_total)
+}
+
+# Inicializar la población con rutas aleatorias
+inicializar_poblacion <- function() {
+  poblacion <- list()
+  for (i in 1:tamano_poblacion) {
+    ruta <- sample(1:num_ciudades, num_ciudades)
+    poblacion[[i]] <- ruta
+  }
+  return(poblacion)
+}
+
+# Selección (ruleta)
+seleccionar_padres <- function(poblacion) {
+  costos <- sapply(poblacion, calcular_costo)
+  probabilidad <- 1 / costos / sum(1 / costos)  # Probabilidad inversa del costo
+  padres <- sample(1:length(poblacion), 2, prob=probabilidad, replace=TRUE)
+  return(list(padres[1], padres[2]))
+}
+
+# Cruce (crossover de orden)
+cruce <- function(padre1, padre2) {
+  n <- length(padre1)
+  hijo <- rep(0, n)
+  puntos <- sample(1:n, 2)
+  start <- min(puntos)
+  end <- max(puntos)
+  
+  hijo[start:end] <- padre1[start:end]
+  
+  j <- 1
+  for (i in setdiff(padre2, hijo)) {
+    while (j >= start && j <= end) {
+      j <- j + 1
+    }
+    hijo[j] <- i
+    j <- j + 1
+  }
+  return(hijo)
+}
+
+# Mutación (intercambiar dos ciudades aleatorias)
+mutacion <- function(ruta) {
+  if (runif(1) < tasa_mutacion) {
+    i <- sample(1:length(ruta), 1)
+    j <- sample(1:length(ruta), 1)
+    temp <- ruta[i]
+    ruta[i] <- ruta[j]
+    ruta[j] <- temp
+  }
+  return(ruta)
+}
+
+# Algoritmo Genético
+algoritmo_genetico <- function() {
+  poblacion <- inicializar_poblacion()
+  historial_costos <- list()  # Crear una lista para almacenar los costos en cada generación
+  
+  for (generacion in 1:num_generaciones) {
+    nueva_poblacion <- list()
+    
+    for (i in 1:(tamano_poblacion / 2)) {
+      # Selección
+      padres <- seleccionar_padres(poblacion)
+      
+      # Cruce
+      if (runif(1) < tasa_cruce) {
+        hijo1 <- cruce(poblacion[[padres[[1]]]], poblacion[[padres[[2]]]])
+        hijo2 <- cruce(poblacion[[padres[[2]]]], poblacion[[padres[[1]]]])
+      } else {
+        hijo1 <- poblacion[[padres[[1]]]]
+        hijo2 <- poblacion[[padres[[2]]]]
+      }
+      
+      # Mutación
+      hijo1 <- mutacion(hijo1)
+      hijo2 <- mutacion(hijo2)
+      
+      nueva_poblacion[[2 * i - 1]] <- hijo1
+      nueva_poblacion[[2 * i]] <- hijo2
+    }
+    
+    poblacion <- nueva_poblacion
+    
+    # Guardar los costos de la población actual
+    costos <- sapply(poblacion, calcular_costo)
+    historial_costos[[generacion]] <- costos  # Guardar el vector de costos para la generación actual
+    
+    # Evaluar la mejor solución en la generación actual
+    mejor_solucion <- which.min(costos)
+    mejor_costo <- costos[mejor_solucion]
+    
+    cat(paste("Generación", generacion, ": Mejor costo =", mejor_costo, "\n"))
+  }
+  
+  # Obtener el costo mínimo final
+  costos_finales <- unlist(historial_costos)
+  min_costo <- min(costos_finales)  # Mejor costo encontrado
+  
+  # Obtener la ruta correspondiente al costo mínimo
+  mejor_indice <- which.min(costos_finales)
+  generacion_mejor <- (mejor_indice - 1) %/% tamano_poblacion + 1  # Generación donde se encontró el mejor costo
+  poblacion_mejor <- poblacion[[mejor_indice %% tamano_poblacion]]
+  
+  return(list(mejor_ruta = poblacion_mejor, mejor_costo = min_costo, generacion = generacion_mejor))
+}
+
+# Ejecutar el algoritmo genético
+resultado <- algoritmo_genetico()
+
+# Mostrar la mejor ruta y el costo encontrado
+cat("Mejor ruta encontrada:", resultado$mejor_ruta, "\n")
+cat("Costo total de la ruta:", resultado$mejor_costo, "\n")
+cat("Generación en la que se encontró el mejor costo:", resultado$generacion, "\n")
+
+
+```
+
+```{r plot_EA, echo=FALSE,warning=FALSE,message=FALSE}
+library(maps)
+
+# No margin
+par(mar=c(0,0,0,0))
+
+# World map
+map('world',
+    col="#f2f2f2", fill=TRUE, bg="white", lwd=0.05,
+    mar=rep(0,4),border=0, ylim=c(-0,15), xlim = c(-80,-70) 
+)
+
+# Dplyr for data wrangling and pipe function
+library(dplyr)
+
+coordenadas <- read.csv("G:/Otros ordenadores/DELL/UNAL/SEMESTRES/2025-1/Trabajo1/Datos/coordenadas_colombia.csv")
+
+
+points(x=coordenadas$Longitud, y=coordenadas$Latitud, col="slateblue", cex=1, pch=20)
+
+# Especificar la ruta según el orden de ciudades
+ruta <- resultado$mejor_ruta  # Orden de ciudades según la ruta
+
+library(geosphere)
+
+# Trazar las conexiones entre las ciudades siguiendo la ruta
+for (i in 1:(length(ruta) - 1)) {
+  # Obtener las coordenadas de las ciudades de la ruta
+  ciudad_inicio <- coordenadas[ruta[i], c("Longitud", "Latitud")]
+  ciudad_fin <- coordenadas[ruta[i + 1], c("Longitud", "Latitud")]
+  
+  # Calcular la ruta intermedia entre las dos ciudades
+  inter <- gcIntermediate(ciudad_inicio, ciudad_fin, n=50, addStartEnd=TRUE, breakAtDateLine=F)
+  
+  # Dibujar la línea en el mapa
+  lines(inter, col="slateblue", lwd=2)
+}
+
+text(coordenadas$Longitud[ruta], coordenadas$Latitud[ruta], labels=coordenadas$Ciudad[ruta], pos=4, cex=0.8)
+```
+```{r gif_EA, echo=FALSE,warning=FALSE,message=FALSE}
+# Cargar librerías necesarias
+library(ggplot2)
+library(gganimate)
+library(ggmap)
+
+register_google(key = "AIzaSyA-vP2YQgPKbZParebspMNES_GGgF_eaio")
+
+# Coordenadas de las ciudades (añadir las coordenadas correspondientes)
+coordenadas <- data.frame(
+  Ciudad = c("Bogotá", "Medellín", "Cali", "Barranquilla", "Bucaramanga", 
+             "Manizales", "Pereira", "Cúcuta", "Pasto", "Ibagué", 
+             "Montería", "Cartagena", "Villavicencio"),
+  Latitud = c(4.7110, 6.2442, 3.4516, 10.9639, 7.1193, 5.0703, 4.8142, 7.8930, 1.2092, 4.4381, 8.7493, 10.3910, 4.1453),
+  Longitud = c(-74.0721, -75.5812, -76.5320, -74.7964, -73.1198, -75.5131, -75.6963, -72.5078, -77.2810, -75.2325, -75.8815, -75.4794, -73.6197)
+)
+
+# Inicializar la población y otras funciones del algoritmo genético (como el cálculo de la distancia y el costo)
+# ... (tu código para el algoritmo genético)
+
+# Supongamos que 'mejor_ruta' es la ruta más corta obtenida por el algoritmo genético
+mejor_ruta <- resultado$mejor_ruta  # Esta es solo una ruta de ejemplo
+
+# Crear un dataframe para las ciudades en la mejor ruta
+ruta_ciudades <- coordenadas[mejor_ruta, ]
+
+# Crear el mapa de Colombia
+colombia_map <- get_map(location = "Colombia", zoom = 6)
+
+# Mapa estático con puntos de las ciudades
+start_map <- ggmap(colombia_map) +
+  geom_point(data = ruta_ciudades, aes(x = Longitud, y = Latitud, group = 1), size = 4, colour = "red", alpha = 0.5) +
+  geom_text(data = ruta_ciudades, aes(x = Longitud, y = Latitud, label = Ciudad), vjust = -1, size = 3, color = "black") +
+  ggtitle("Ruta más corta entre las ciudades de Colombia")
+
+# Animación de la ruta
+route_animation <- start_map + 
+  geom_path(data = ruta_ciudades, aes(x = Longitud, y = Latitud, group = 1), size = 1.5, colour = "blue") +
+  transition_reveal(along = seq_along(ruta_ciudades$Ciudad)) +
+  labs(title = "Ruta más corta: {frame_time}", subtitle = "Desde Bogotá hasta Villavicencio")
+
+# Mostrar la animación
+# Animar la ruta
+animate(route_animation, 
+        nframes = length(ruta_ciudades) * 10,  # Número de frames
+        fps = 10,  # Frames por segundo
+        end_pause = 20,  # Pausa al final
+        renderer = gifski_renderer("Best_ruta_EA.gif")) 
+
+
+
+```
+     
+## Bibliofía
+
+1. DANE. (2025). DANE. Boletines. Recuperado 29 de abril de 2025, de https://www.dane.gov.co/files/investigaciones/boletines/ech/ech/pres_web_empleo_rueda_prensa_ene_20.pdf
+2. Dorigo, M., Maniezzo, V., & Colorni, A. (1996). Ant system: optimization by a colony of cooperating agents. IEEE Transactions on Systems Man and Cybernetics Part B (Cybernetics), 26(1), 29–41. https://doi.org/10.1109/3477.484436
+3. Huang, H., Qiu, J., & Riedl, K. (2023). On the global convergence of particle swarm optimization methods. Applied Mathematics & Optimization, 88(2), Article 30. https://doi.org/10.1007/s00245-023-09983-3
+4. Holland, J. H. (1975). Adaptation in natural and artificial systems. University of Michigan Press.
+5. IBM. (n.d.). ¿Qué es el descenso del gradiente?. Recuperado el 29 de abril de 2025, de https://www.ibm.com/mx-es/think/topics/gradient-descent
+6. Jamil, M., & Yang, X.-S. (2013). A literature survey of benchmark functions for global optimization problems. International Journal of Mathematical Modelling and Numerical Optimization, 4(2), 150–194.
+7. Peajes. (2016, February 8). https://www.invias.gov.co/index.php/listado-tarifas-peajes-2
+8. Salario para Transporte De Carga en Colombia - Salario Medio. (n.d.). Talent.com. https://co.talent.com/salary?job=transporte+de+carga
+9. Simon Fraser University. (s.f.). Six-Hump Camel Function. Recuperado el 29 de abril de 2025, de https://www.sfu.ca/~ssurjano/camel6.html
+10. Storn, R., & Price, K. (1997). Differential evolution – a simple and efficient heuristic for global optimization over continuous spaces. Journal of Global Optimization, 11(4), 341–359. https://doi.org/10.1023/A:1008202821328
+11. Wikipedia. (s.f.). Descenso del gradiente. Recuperado el 29 de abril de 2025, de https://es.wikipedia.org/wiki/Descenso_del_gradiente
+12. Wikipedia contributors. (s.f.). Griewank function. Wikipedia. https://en.wikipedia.org/wiki/Griewank_function
+13. Wikipedia contributors. (2025, February 20). Problema del viajante. Wikipedia, La Enciclopedia Libre. https://es.wikipedia.org/wiki/Problema_del_viajante
+
+
+## Reporte de contribución individual
+
+- Wesly Zamira Huertas Salinas: Programación y documentación de la segunda parte, y organización del reporte general
+- Alejandro Torrado Calderón: Programación y documentación de la función Griewank.
+- Juan Pablo Muñoz Jimenez: Programación y documentación de la función de las seis jorobas de camello.
+
