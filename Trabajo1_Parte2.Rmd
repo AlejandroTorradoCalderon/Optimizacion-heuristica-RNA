@@ -1,0 +1,572 @@
+---
+title: "Optimización Heurística"
+author: 
+- "Wesly Zamira Huertas Salinas"
+- "Ajandro Torrado Calderón"
+- "Juan Pablo Muñoz Jimenez"
+date: "2025-04-28"
+output: 
+  html_document:
+    css: styles.css
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r gor_loading, include=FALSE}
+library(gor)
+```
+## Parte 1: Optimización numérica
+
+
+
+
+## Parte 2: Optimización combinatoria, Problema TSP (Travelling Salesman Problem)
+
+Un vendedor debe hacer un recorrido por todas y cada de las 13 ciudades principales de Colombia. 
+
+Utilice colonias de hormigas y algoritmos genéticos para encontrar el orden óptimo. El costo de desplazamiento entre ciudades es la suma del valor de la hora del vendedor (es un parámetro que debe estudiarse), el costo de los peajes y el costo del combustible. Cada equipo debe definir en qué carro hace el recorrido el vendedor y de allí extraer el costo del combustible.
+
+Adicionalmente represente con un gif animado o un video cómo se comporta la mejor solución usando un gráfico del recorrido en el mapa de Colombia.
+
+
+### Obtención de datos
+
+#### Ciudades principales de Colombia
+
+En primer lugar el análisis de la ruta más óptima para este problema se hará con las siguientes 13 ciudades (DANE, 2020):
+
+1. **Bogotá D.C.** – Capital del país y principal centro económico, político y cultural.  
+2. **Medellín** – Capital de Antioquia, reconocida por su innovación y desarrollo industrial.  
+3. **Cali** – Capital del Valle del Cauca, centro agroindustrial y cultural del suroccidente.  
+4. **Barranquilla** – Principal puerto del Caribe colombiano y epicentro industrial y logístico.  
+5. **Cartagena** – Ciudad portuaria y turística clave, con gran valor histórico.  
+6. **Cúcuta** – Capital de Norte de Santander, zona fronteriza con Venezuela.  
+7. **Bucaramanga** – Capital de Santander, reconocida por su calidad de vida y desarrollo urbano.  
+8. **Pereira** – Capital de Risaralda, eje del triángulo cafetero.  
+9. **Manizales** – Capital de Caldas, centro educativo y cultural del eje cafetero.  
+10. **Armenia** – Capital de Quindío, parte fundamental del eje cafetero.  
+11. **Ibagué** – Capital del Tolima, conocida por su tradición musical.  
+12. **Santa Marta** – Capital del Magdalena, con gran importancia turística y portuaria.  
+13. **Villavicencio** – Capital del Meta, puerta de entrada a los Llanos Orientales.
+
+La ubicación de cada una de estas ciudades se muestra a continuación:
+
+```{r mapa_Colombia}
+
+library(maps)
+library(dplyr)
+
+
+# No margin
+par(mar=c(0,0,0,0))
+
+# World map
+map('world',
+    col="#f2f2f2", fill=TRUE, bg="white", lwd=0.05,
+    mar=rep(0,4),border=0, ylim=c(-0,15), xlim = c(-80,-70) 
+)
+
+
+coordenadas <- read.csv("./Datos/coordenadas_colombia.csv")
+
+
+points(x=coordenadas$Longitud, y=coordenadas$Latitud, col="slateblue", cex=1, pch=20)
+
+# Especificar la ruta según el orden de ciudades
+ruta <- c(1, 13,  4,  3, 10,  6,  7,  5, 11, 12,  2,  8,  9)  # Orden de ciudades según la ruta
+
+
+text(coordenadas$Longitud[ruta], coordenadas$Latitud[ruta], labels=coordenadas$Ciudad[ruta], pos=2, cex=0.6)
+
+print(coordenadas$Latitud[0])
+
+```
+
+#### Cálculo de la matriz de costos
+
+Teniendo en cuenta que el costo del desplazamiento entre ciudades es la suma del valor de la hora del vendedor, el costo de los peajes y el costo del combustible, se calculó el tiempo entre cada trayecto de acuerdo a datos de Google Maps, el costo de los peajes de acuerdo con ___, y el costo del combustible teniendo en cuenta el vehículo selesccionado para hacer el recorrido.
+
+##### Salario del vendedor
+
+Para el cálculo del salario del vendedor se creó una matriz con los tiempos de viaje en cada trayecto usando una API de Google Maps, como se muestra a continuación:
+
+```{r tiempos}
+library(googleway)
+library(dplyr)
+
+ciudades <- c(
+  "Bogotá, Colombia", "Medellín, Colombia", "Cali, Colombia", "Barranquilla, Colombia",
+  "Bucaramanga, Colombia", "Manizales, Colombia", "Pereira, Colombia", "Cúcuta, Colombia",
+  "Pasto, Colombia", "Ibagué, Colombia", "Montería, Colombia", "Cartagena, Colombia",
+  "Villavicencio, Colombia"
+)
+
+coordenadas <- read.csv("./Datos/coordenadas_colombia.csv")
+
+# Tu API Key
+api_key <- "AIzaSyA-vP2YQgPKbZParebspMNES_GGgF_eaio"
+
+# Matriz vacía
+n <- length(ciudades)
+tiempo_matrix <- matrix(0, nrow = n, ncol = n)
+rownames(tiempo_matrix) <- coordenadas$Ciudad
+colnames(tiempo_matrix) <- coordenadas$Ciudad
+
+# Llenar la matriz usando la API
+for (i in 1:n) {
+  result <- google_distance(origins = ciudades[i],
+                            destinations = ciudades,
+                            key = api_key,
+                            mode = "driving")
+  
+  # Extraer las distancias en kilómetros
+  tiempo_h <- sapply(result$rows$elements, function(e) e$duration$value / 3600)
+  
+  tiempo_matrix[i, ] <- tiempo_h
+}
+
+tiempo_matrix_df <- as.data.frame(tiempo_matrix)
+print(tiempo_matrix_df)
+
+```
+
+Luego se multiplicó cada valor de esta matriz por el salario por hora del vendedor, que de acuerdo con (Salario Para Transporte De Carga En Colombia - Salario Medio, n.d.) es de 1'700.000 COP por mes, por lo que la hora sería a aproximadamente 9.700 COP, quedando de la siguiente forma:
+
+\[
+Costo_{vendedor} = tiempos \times 9700
+\]
+
+Siguiendo lo anterior la matríz de salarios del vendedor en pesos colombianos es la siguiente:
+
+```{r costo_vendedor}
+salario_por_hora <- 9700
+costos_vendedor <- tiempo_matrix_df * salario_por_hora
+print(costos_vendedor)
+
+```
+
+##### Costo del combustible
+
+Para calcular el costo del combustible, primero se creó la matriz de distancias en kilómetros usando una API de Google Maps, como se muestra a continuación:
+
+```{r distancias}
+
+library(googleway)
+library(dplyr)
+
+ciudades <- c(
+  "Bogotá, Colombia", "Medellín, Colombia", "Cali, Colombia", "Barranquilla, Colombia",
+  "Bucaramanga, Colombia", "Manizales, Colombia", "Pereira, Colombia", "Cúcuta, Colombia",
+  "Pasto, Colombia", "Ibagué, Colombia", "Montería, Colombia", "Cartagena, Colombia",
+  "Villavicencio, Colombia"
+)
+
+
+# Tu API Key
+api_key <- "AIzaSyA-vP2YQgPKbZParebspMNES_GGgF_eaio"
+
+# Matriz vacía
+n <- length(ciudades)
+dist_matrix <- matrix(0, nrow = n, ncol = n)
+rownames(dist_matrix) <- coordenadas$Ciudad
+colnames(dist_matrix) <- coordenadas$Ciudad
+
+# Llenar la matriz usando la API
+for (i in 1:n) {
+  result <- google_distance(origins = ciudades[i],
+                            destinations = ciudades,
+                            key = api_key,
+                            mode = "driving")
+  
+  # Extraer las distancias en kilómetros
+  dist_km <- sapply(result$rows$elements, function(e) e$distance$value / 1000)
+  
+  dist_matrix[i, ] <- dist_km
+}
+
+dist_matrix_df <- as.data.frame(dist_matrix)
+print(dist_matrix_df)
+
+```
+
+Luego, se seleccionó el modelo de vehículo que conducirá el vendedor, en este caso será una Renault Kangoo 1.5 que tiene un consumo de combustible de 4,5 litros cada 100 km de acuerdo con la empresa Renault. Adicionalmente, teniendo en cuenta que en Colombia el precio de la gasolina es de en promedio 15.827 COP el galón (Creg, 2025), y un galón tiene 3,78 litros, entonces, el precio de la gasolina por litro es de 4.187 COP. Por lo anterior, la ecuación para calcular el costo del combustible en cada ruta es:
+
+\[
+Costo_{combustible} = distancia [km] \times \frac{4,5}{100} [l/km] \times 4187 [COP/l]
+\]
+
+Por lo anterior, la matríz final de costos de combustible se presenta a continuación:
+
+```{r combustible}
+costos_combustible <- dist_matrix_df * 4.5/100 * 4187
+print(costos_combustible)
+
+```
+##### Costo de los peajes
+
+Teniendo en cuenta los datos suministrados por (Peajes, 2025) se creó la siguiente matriz con los costos de peaje en COP por cada ruta:
+
+```{r peajes}
+costos_peajes <- read.csv("./datos/peajes_colombia.csv")
+print(costos_peajes)
+```
+#### _
+Finalmente, la matriz de costos final se calcula de la siguiente forma:
+
+\[
+Costo_{total} = Costo_{vendedor} + Costo_{combustible} + Costo_{peajes}
+\]
+
+```{r costo_total}
+
+costos_totales <- costos_vendedor + costos_combustible + costos_peajes[, -1]
+print(costos_totales)
+```
+ 
+### Algoritmo Ant System aplicado al problema TSP
+
+
+```{r Hormigas}
+library(gor)
+
+n_ciudades <- 13
+matriz_normalizada <- costos_totales / 10000 # Se escala la matriz ya que tiene numeros muy grandes
+recorrido_optimizado <- search_tour_ants(matriz_normalizada,n_ciudades, 
+                                         K = 50,
+                                         N = 100,
+                                         beta = 5,
+                                         alpha = 1,
+                                         rho = 0.1,
+                                         )
+print(recorrido_optimizado)
+```
+Gráfico
+
+```{r plot_Hormigas}
+library(maps)
+
+# No margin
+par(mar=c(0,0,0,0))
+
+# World map
+map('world',
+    col="#f2f2f2", fill=TRUE, bg="white", lwd=0.05,
+    mar=rep(0,4),border=0, ylim=c(-0,15), xlim = c(-80,-70) 
+)
+
+# Dplyr for data wrangling and pipe function
+library(dplyr)
+
+
+coordenadas <- read.csv("./Datos/coordenadas_colombia.csv")
+
+
+points(x=coordenadas$Longitud, y=coordenadas$Latitud, col="slateblue", cex=1, pch=20)
+
+# Especificar la ruta según el orden de ciudades
+ruta <- recorrido_optimizado$tour  # Orden de ciudades según la ruta
+
+library(geosphere)
+
+# Trazar las conexiones entre las ciudades siguiendo la ruta
+for (i in 1:(length(ruta) - 1)) {
+  # Obtener las coordenadas de las ciudades de la ruta
+  ciudad_inicio <- coordenadas[ruta[i], c("Longitud", "Latitud")]
+  ciudad_fin <- coordenadas[ruta[i + 1], c("Longitud", "Latitud")]
+  
+  # Calcular la ruta intermedia entre las dos ciudades
+  inter <- gcIntermediate(ciudad_inicio, ciudad_fin, n=50, addStartEnd=TRUE, breakAtDateLine=F)
+  
+  # Dibujar la línea en el mapa
+  lines(inter, col="slateblue", lwd=2)
+}
+
+text(coordenadas$Longitud[ruta], coordenadas$Latitud[ruta], labels=coordenadas$Ciudad[ruta], pos=4, cex=0.8)
+```
+
+```{r gif_EA}
+# Cargar librerías necesarias
+library(ggplot2)
+library(gganimate)
+library(ggmap)
+
+register_google(key = "AIzaSyA-vP2YQgPKbZParebspMNES_GGgF_eaio")
+
+# Coordenadas de las ciudades (añadir las coordenadas correspondientes)
+coordenadas <- data.frame(
+  Ciudad = c("Bogotá", "Medellín", "Cali", "Barranquilla", "Bucaramanga", 
+             "Manizales", "Pereira", "Cúcuta", "Pasto", "Ibagué", 
+             "Montería", "Cartagena", "Villavicencio"),
+  Latitud = c(4.7110, 6.2442, 3.4516, 10.9639, 7.1193, 5.0703, 4.8142, 7.8930, 1.2092, 4.4381, 8.7493, 10.3910, 4.1453),
+  Longitud = c(-74.0721, -75.5812, -76.5320, -74.7964, -73.1198, -75.5131, -75.6963, -72.5078, -77.2810, -75.2325, -75.8815, -75.4794, -73.6197)
+)
+
+# Inicializar la población y otras funciones del algoritmo genético (como el cálculo de la distancia y el costo)
+# ... (tu código para el algoritmo genético)
+
+# Supongamos que 'mejor_ruta' es la ruta más corta obtenida por el algoritmo genético
+mejor_ruta <- recorrido_optimizado$tour  # Esta es solo una ruta de ejemplo
+
+# Crear un dataframe para las ciudades en la mejor ruta
+ruta_ciudades <- coordenadas[mejor_ruta, ]
+
+# Crear el mapa de Colombia
+colombia_map <- get_map(location = "Colombia", zoom = 6)
+
+# Mapa estático con puntos de las ciudades
+start_map <- ggmap(colombia_map) +
+  geom_point(data = ruta_ciudades, aes(x = Longitud, y = Latitud, group = 1), size = 4, colour = "red", alpha = 0.5) +
+  geom_text(data = ruta_ciudades, aes(x = Longitud, y = Latitud, label = Ciudad), vjust = -1, size = 3, color = "black") +
+  ggtitle("Ruta más corta entre las ciudades de Colombia")
+
+# Animación de la ruta
+route_animation <- start_map + 
+  geom_path(data = ruta_ciudades, aes(x = Longitud, y = Latitud, group = 1), size = 1.5, colour = "blue") +
+  transition_reveal(along = seq_along(ruta_ciudades$Ciudad)) +
+  labs(title = "Ruta más corta: {frame_time}", subtitle = "Desde Bogotá hasta Villavicencio")
+
+# Mostrar la animación
+animate(route_animation, 
+        nframes = length(ruta_ciudades) * 10,  # Número de frames
+        fps = 10,  # Frames por segundo
+        end_pause = 20,  # Pausa al final
+        renderer = gifski_renderer("Best_ruta_SA.gif")) 
+
+
+```
+
+Algoritmo evolutivo
+
+```{r pressure, echo=FALSE}
+# Cargar librerías necesarias
+library(ggplot2)
+
+# Inicializar las coordenadas de las ciudades
+coordenadas <- data.frame(
+  Ciudad = c("Bogotá", "Medellín", "Cali", "Barranquilla", "Bucaramanga", 
+             "Manizales", "Pereira", "Cúcuta", "Pasto", "Ibagué", 
+             "Montería", "Cartagena", "Villavicencio"),
+  Latitud = c(4.7110, 6.2442, 3.4516, 10.9639, 7.1193, 5.0703, 4.8142, 7.8930, 1.2092, 4.4381, 8.7493, 10.3910, 4.1453),
+  Longitud = c(-74.0721, -75.5812, -76.5320, -74.7964, -73.1198, -75.5131, -75.6963, -72.5078, -77.2810, -75.2325, -75.8815, -75.4794, -73.6197)
+)
+
+# Número de generaciones y tamaño de población
+num_generaciones <- 100
+tamano_poblacion <- 50
+tasa_cruce <- 0.8
+tasa_mutacion <- 0.2
+num_ciudades <- nrow(coordenadas)
+
+
+# Función para calcular el costo de una ruta
+calcular_costo <- function(ruta) {
+  costo_total <- 0
+  for (i in 1:(length(ruta) - 1)) {
+    costo_total <- costo_total + costos_totales[ruta[i], ruta[i + 1]]
+  }
+  # Añadir el costo de regresar a la primera ciudad
+  costo_total <- costo_total + costos_totales[ruta[length(ruta)], ruta[1]]
+  return(costo_total)
+}
+
+# Inicializar la población con rutas aleatorias
+inicializar_poblacion <- function() {
+  poblacion <- list()
+  for (i in 1:tamano_poblacion) {
+    ruta <- sample(1:num_ciudades, num_ciudades)
+    poblacion[[i]] <- ruta
+  }
+  return(poblacion)
+}
+
+# Selección (ruleta)
+seleccionar_padres <- function(poblacion) {
+  costos <- sapply(poblacion, calcular_costo)
+  probabilidad <- 1 / costos / sum(1 / costos)  # Probabilidad inversa del costo
+  padres <- sample(1:length(poblacion), 2, prob=probabilidad, replace=TRUE)
+  return(list(padres[1], padres[2]))
+}
+
+# Cruce (crossover de orden)
+cruce <- function(padre1, padre2) {
+  n <- length(padre1)
+  hijo <- rep(0, n)
+  puntos <- sample(1:n, 2)
+  start <- min(puntos)
+  end <- max(puntos)
+  
+  hijo[start:end] <- padre1[start:end]
+  
+  j <- 1
+  for (i in setdiff(padre2, hijo)) {
+    while (j >= start && j <= end) {
+      j <- j + 1
+    }
+    hijo[j] <- i
+    j <- j + 1
+  }
+  return(hijo)
+}
+
+# Mutación (intercambiar dos ciudades aleatorias)
+mutacion <- function(ruta) {
+  if (runif(1) < tasa_mutacion) {
+    i <- sample(1:length(ruta), 1)
+    j <- sample(1:length(ruta), 1)
+    temp <- ruta[i]
+    ruta[i] <- ruta[j]
+    ruta[j] <- temp
+  }
+  return(ruta)
+}
+
+# Algoritmo Genético
+algoritmo_genetico <- function() {
+  poblacion <- inicializar_poblacion()
+  
+  for (generacion in 1:num_generaciones) {
+    nueva_poblacion <- list()
+    
+    for (i in 1:(tamano_poblacion / 2)) {
+      # Selección
+      padres <- seleccionar_padres(poblacion)
+      
+      # Cruce
+      if (runif(1) < tasa_cruce) {
+        hijo1 <- cruce(poblacion[[padres[[1]]]], poblacion[[padres[[2]]]])
+        hijo2 <- cruce(poblacion[[padres[[2]]]], poblacion[[padres[[1]]]])
+      } else {
+        hijo1 <- poblacion[[padres[[1]]]]
+        hijo2 <- poblacion[[padres[[2]]]]
+      }
+      
+      # Mutación
+      hijo1 <- mutacion(hijo1)
+      hijo2 <- mutacion(hijo2)
+      
+      nueva_poblacion[[2 * i - 1]] <- hijo1
+      nueva_poblacion[[2 * i]] <- hijo2
+    }
+    
+    poblacion <- nueva_poblacion
+    
+    # Evaluar la mejor solución en la generación actual
+    costos <- sapply(poblacion, calcular_costo)
+    mejor_solucion <- which.min(costos)
+    mejor_costo <- costos[mejor_solucion]
+    
+    cat(paste("Generación", generacion, ": Mejor costo =", mejor_costo, "\n"))
+  }
+  
+  # Resultado final
+  costos <- sapply(poblacion, calcular_costo)
+  mejor_solucion <- which.min(costos)
+  mejor_ruta <- poblacion[[mejor_solucion]]
+  return(mejor_ruta)
+}
+
+# Ejecutar el algoritmo genético
+mejor_ruta_EA <- algoritmo_genetico()
+cat("Mejor ruta encontrada:", mejor_ruta_EA, "\n")
+cat("Costo total de la ruta:", calcular_costo(mejor_ruta_EA), "\n")
+
+```
+
+```{r plot_EA}
+library(maps)
+
+# No margin
+par(mar=c(0,0,0,0))
+
+# World map
+map('world',
+    col="#f2f2f2", fill=TRUE, bg="white", lwd=0.05,
+    mar=rep(0,4),border=0, ylim=c(-0,15), xlim = c(-80,-70) 
+)
+
+# Dplyr for data wrangling and pipe function
+library(dplyr)
+
+coordenadas <- read.csv("G:/Otros ordenadores/DELL/UNAL/SEMESTRES/2025-1/Trabajo1/Datos/coordenadas_colombia.csv")
+
+
+points(x=coordenadas$Longitud, y=coordenadas$Latitud, col="slateblue", cex=1, pch=20)
+
+# Especificar la ruta según el orden de ciudades
+ruta <- mejor_ruta_EA  # Orden de ciudades según la ruta
+
+library(geosphere)
+
+# Trazar las conexiones entre las ciudades siguiendo la ruta
+for (i in 1:(length(ruta) - 1)) {
+  # Obtener las coordenadas de las ciudades de la ruta
+  ciudad_inicio <- coordenadas[ruta[i], c("Longitud", "Latitud")]
+  ciudad_fin <- coordenadas[ruta[i + 1], c("Longitud", "Latitud")]
+  
+  # Calcular la ruta intermedia entre las dos ciudades
+  inter <- gcIntermediate(ciudad_inicio, ciudad_fin, n=50, addStartEnd=TRUE, breakAtDateLine=F)
+  
+  # Dibujar la línea en el mapa
+  lines(inter, col="slateblue", lwd=2)
+}
+
+text(coordenadas$Longitud[ruta], coordenadas$Latitud[ruta], labels=coordenadas$Ciudad[ruta], pos=4, cex=0.8)
+```
+```{r gif_EA}
+# Cargar librerías necesarias
+library(ggplot2)
+library(gganimate)
+library(ggmap)
+
+register_google(key = "AIzaSyA-vP2YQgPKbZParebspMNES_GGgF_eaio")
+
+# Coordenadas de las ciudades (añadir las coordenadas correspondientes)
+coordenadas <- data.frame(
+  Ciudad = c("Bogotá", "Medellín", "Cali", "Barranquilla", "Bucaramanga", 
+             "Manizales", "Pereira", "Cúcuta", "Pasto", "Ibagué", 
+             "Montería", "Cartagena", "Villavicencio"),
+  Latitud = c(4.7110, 6.2442, 3.4516, 10.9639, 7.1193, 5.0703, 4.8142, 7.8930, 1.2092, 4.4381, 8.7493, 10.3910, 4.1453),
+  Longitud = c(-74.0721, -75.5812, -76.5320, -74.7964, -73.1198, -75.5131, -75.6963, -72.5078, -77.2810, -75.2325, -75.8815, -75.4794, -73.6197)
+)
+
+# Inicializar la población y otras funciones del algoritmo genético (como el cálculo de la distancia y el costo)
+# ... (tu código para el algoritmo genético)
+
+# Supongamos que 'mejor_ruta' es la ruta más corta obtenida por el algoritmo genético
+mejor_ruta <- mejor_ruta_EA  # Esta es solo una ruta de ejemplo
+
+# Crear un dataframe para las ciudades en la mejor ruta
+ruta_ciudades <- coordenadas[mejor_ruta, ]
+
+# Crear el mapa de Colombia
+colombia_map <- get_map(location = "Colombia", zoom = 6)
+
+# Mapa estático con puntos de las ciudades
+start_map <- ggmap(colombia_map) +
+  geom_point(data = ruta_ciudades, aes(x = Longitud, y = Latitud, group = 1), size = 4, colour = "red", alpha = 0.5) +
+  geom_text(data = ruta_ciudades, aes(x = Longitud, y = Latitud, label = Ciudad), vjust = -1, size = 3, color = "black") +
+  ggtitle("Ruta más corta entre las ciudades de Colombia")
+
+# Animación de la ruta
+route_animation <- start_map + 
+  geom_path(data = ruta_ciudades, aes(x = Longitud, y = Latitud, group = 1), size = 1.5, colour = "blue") +
+  transition_reveal(along = seq_along(ruta_ciudades$Ciudad)) +
+  labs(title = "Ruta más corta: {frame_time}", subtitle = "Desde Bogotá hasta Villavicencio")
+
+# Mostrar la animación
+# Animar la ruta
+animate(route_animation, 
+        nframes = length(ruta_ciudades) * 10,  # Número de frames
+        fps = 10,  # Frames por segundo
+        end_pause = 20,  # Pausa al final
+        renderer = gifski_renderer("Best_ruta_EA.gif")) 
+
+
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
