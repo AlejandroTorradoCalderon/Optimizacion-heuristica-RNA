@@ -1812,7 +1812,7 @@ fig
 ```
 
 
-## **2.4 Conclusiones:**
+## **2.4 Conclusiones Six Hump Camel Function:**
 ### **¿Qué aportaron los métodos de descenso por gradiente y qué aportaron los métodos heurísticos?**
 #### **Método por descenso del gradiente:**
 
@@ -1840,6 +1840,40 @@ Por optimización mediante PSO se alcanzó el valor objetivo por primera vez a p
 Por optimización mediante DE se logró el valor objetivo en alrededor de 43 iteraciones con una población de 50 individuos.
 Tanto como en dos dimensiones y tres dimensiones el algoritmo encontró los dos mínimos globales de la función de una forma eficiente, dejando pasar mínimos locales y encontrando el valor óptimo de la función.
 A diferencia de los otros métodos heuristicos y metodo por descenso del gradiente presentados en este trabajo, el algoritmo de evolución diferencial fue el único en encontrar los dos mínimos globales de la función de las seis jorobas de camello
+
+
+## **Conclusión general primera parte: Optimización númerica (Griewank function & Six Hump Camel function en conjunto)**
+
+Unificando las conclusiones de ambas funciones se llegó a la conclusión general en la que:
+
+### **Usando el método por descenso por gradiente:**
+
+
+El método de descenso por gradiente se destacó por su alta eficiencia computacional: con un bajo número de evaluaciones logró converger rápidamente. Sin embargo, su rendimiento se vio afectado por la naturaleza multimodal de ambas funciones, especialmente en Griewank, donde se quedó atrapado en mínimos locales alejados del óptimo global. En el caso de la función Six Hump Camel, en 2D logró alcanzar uno de los óptimos, pero en 3D volvió a presentar dificultades para escapar de pozos locales. Esto refuerza la conclusión de que el descenso por gradiente explota bien la información local, pero carece de mecanismos de exploración global. En resumen, se determina que existe eficiencia local pero exploración global limitada.
+
+
+"La técnica de optimización por descenso de gradiente generalmente no es viable para datos de mayor dimensión, y es aquí donde se pueden considerar técnicas de optimización alternativas para el descenso de gradiente, con el fin de aumentar la optimización. Estas técnicas ayudan al modelo a converger a la solución óptima con un número mínimo de hiperparámetros y con un número mínimo de pasos a realizar por los gradientes." (Analytics India Magazine, 2021)
+
+
+### **Usando Métodos heurísticos:**
+
+Los métodos heurísticos demostraron una **mejor capacidad exploratoria** en ambas funciones:
+
+- **Algoritmo Genético (GA)** logró una muy buena aproximación al óptimo global en ambos casos. En la función Griewank, alcanzó valores cercanos a cero con poblaciones grandes y muchas generaciones; en la función de las seis jorobas de camello, fue capaz de encontrar un mínimo global rápidamente, aunque no siempre identificó ambos óptimos simultáneamente.
+
+- **PSO (Particle Swarm Optimization)** mostró resultados altamente consistentes. En Griewank alcanzó valores óptimos con menos evaluaciones que GA, y en la función de las seis jorobas logró converger al valor objetivo en todas las pruebas, aunque solo a uno de los mínimos globales. El uso de un coeficiente de inercia adecuado (e.g., 0.5) fue clave para balancear exploración y explotación.
+
+- **Evolución Diferencial (DE)** ofreció un excelente compromiso entre eficiencia y exploración. Aunque en Griewank su rendimiento fue inferior al de GA y PSO, en la función Six Hump Camel se posicionó como el **único algoritmo** que encontró **ambos mínimos globales** de forma consistente en 2D y 3D, evitando caer en mínimos locales.
+
+
+En resumen, el uso de métodos heurísticos para ambas funciones demostró una exploración efectiva con respecto a sus óptimos globales pero con un mayor costo computacional.
+
+
+### **Reflexión final del uso de estos métodos:**
+
+La comparación evidencia que no existe un algoritmo universalmente superior a otro, cada uno tiene fortalezas particulares según el problema evaluado. El descenso por gradiente es útil cuando se dispone de información local precisa y funciones suaves, mientras que los algoritmos heurísticos ofrecen una alternativa más robusta para problemas con múltiples óptimos y estructuras complejas en el espacio de búsqueda. En contextos reales donde la función objetivo puede ser no diferenciable o ruidosa, los métodos heurísticos se perfilan como herramientas más versátiles, aunque a costa de mayor tiempo de calculo/computo de los algoritmos.
+
+
 
 
 ## 3. Optimización combinatoria, Problema TSP (Travelling Salesman Problem)
@@ -2422,6 +2456,7 @@ animate(route_animation,
 14. Loshchilov, I. & Hutter, F. (2016). SGDR: Stochastic Gradient Descent with Warm Restarts. arXiv:1608.03983.
 15. Shi, Y. & Eberhart, R. (1998). A modified particle swarm optimizer. Proceedings of the IEEE International Conference on Evolutionary Computation.
 16. Price, K., Storn, R. & Lampinen, J. (2005). Differential Evolution: A Practical Approach to Global Optimization. Springer.
+17. Analytics India Magazine. (2021, 8 de abril). Top alternatives to gradient descent. https://analyticsindiamag.com/top-alternatives-to-gradient-descent/
 
 
 ## Reporte de contribución individual
