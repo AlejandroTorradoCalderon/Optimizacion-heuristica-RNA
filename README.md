@@ -13,3 +13,7 @@ Además, se encuentra el código para la parte 2: Optimización combinatoria y s
 
 
 ## Contenido del repositorio:
+
+### griewankFunction.Rmd
+
+El archivo `griewankFunction.Rmd` se incluye en este repositorio como parte del conjunto de evidencias generadas durante el desarrollo del trabajo.
